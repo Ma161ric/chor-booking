@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin-Dashboard - Chor-Konzert Ticketbuchung</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div>
+      <h1>🎵 Admin-Dashboard</h1>
+    </div>
+    <div class="nav-buttons">
+      <button class="btn btn-outline" onclick="window.location.href='index.html'">Zurück zur Website</button>
+      <button class="btn btn-outline" onclick="adminPage.logout()">Abmelden</button>
+    </div>
+  </header>
+
+  <!-- Alert Container -->
+  <div id="alert-container" style="position: fixed; top: 80px; right: 20px; max-width: 400px; z-index: 100;"></div>
+
+  <!-- Main Container -->
+  <div class="container">
+
+    <!-- Admin Login (Before Login) -->
+    <div id="admin-login" class="card" style="max-width: 400px; margin: 3rem auto;">
+      <h2 style="text-align: center; margin-bottom: 2rem;">Admin-Login</h2>
+
+      <div class="form-group">
+        <label>Admin-Email *</label>
+        <input type="email" id="admin-email-input" placeholder="admin@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label>Admin-Passwort *</label>
+        <input type="password" id="admin-password-input" placeholder="Dein Admin-Passwort" required>
+      </div>
+
+      <button class="btn btn-primary btn-block" onclick="adminPage.handleAdminLogin()">Anmelden</button>
+
+      <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.9rem;">
+        <p style="margin: 0; color: #0c2d6b;">
+          📌 Bei der ersten Anmeldung:
+          <br>1. Erstelle ein Firebase-Projekt
+          <br>2. Erstelle einen Admin-Eintrag in Firestore
+          <br>3. Verwende die Credentials hier
+        </p>
+      </div>
+    </div>
+
+    <!-- Admin Panel (After Login) -->
+    <div id="admin-panel" class="auth-page" style="display: none;">
+
+      <!-- Tab Navigation -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="events" onclick="adminPanel.switchTab('events')">📅 Events</button>
+        <button class="tab-btn" data-tab="bookings" onclick="adminPanel.switchTab('bookings')">🎫 Buchungen</button>
+        <button class="tab-btn" data-tab="settings" onclick="adminPanel.switchTab('settings')">⚙️ Einstellungen</button>
+      </div>
+
+      <!-- Events Tab -->
+      <div id="events-tab" class="tab-content active">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2>Events verwalten</h2>
+            <button class="btn btn-success" onclick="adminPanel.openCreateEventModal()">+ Neues Event</button>
+          </div>
+          <div id="events-list">
+            <div style="text-align: center; padding: 2rem;">
+              <div class="spinner"></div>
+              <p>Lade Events...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bookings Tab -->
+      <div id="bookings-tab" class="tab-content">
+        <div class="card">
+          <h2>Buchungen verwalten</h2>
+          <div id="bookings-list">
+            <div style="text-align: center; padding: 2rem;">
+              <div class="spinner"></div>
+              <p>Lade Buchungen...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="settings-tab" class="tab-content">
+        <!-- Content loaded dynamically -->
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Event Modal -->
+  <div id="event-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Event erstellen/bearbeiten</h2>
+        <button class="close-btn" onclick="adminPanel.closeEventModal()">✕</button>
+      </div>
+      <div id="event-form-content"></div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
+
+  <!-- Our JavaScript Files -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/events.js"></script>
+  <script src="js/booking.js"></script>
+  <script src="js/admin.js"></script>
+
+  <!-- Admin Page Controller -->
+  <script>
+    class AdminPage {
+      constructor() {
+        this.checkAdminPage();
+      }
+
+      // Check if page should show login or admin panel
+      checkAdminPage() {
+        auth.onAuthStateChanged(async (user) => {
+          if (user && authManager.isAdmin) {
+            document.getElementById("admin-login").style.display = "none";
+            document.getElementById("admin-panel").classList.add("active");
+            adminPanel.switchTab("events");
+          } else if (!user) {
+            document.getElementById("admin-login").style.display = "block";
+            document.getElementById("admin-panel").classList.remove("active");
+          } else {
+            authManager.showAlert("Diese Seite ist nur für Admins zugänglich.", "error");
+            setTimeout(() => window.location.href = "index.html", 2000);
+          }
+        });
+      }
+
+      // Handle Admin Login
+      async handleAdminLogin() {
+        const email = document.getElementById("admin-email-input").value.trim();
+        const password = document.getElementById("admin-password-input").value.trim();
+
+        if (!email || !password) {
+          authManager.showAlert("Bitte fülle alle Felder aus.", "error");
+          return;
+        }
+
+        // For now, show instructions (real implementation requires specific setup)
+        try {
+          // Try direct login with Firebase
+          const userCredential = await auth.signInWithEmailAndPassword(email, password);
+          
+          // Then verify through admin password check
+          const adminDoc = await db.collection("admin").doc("config").get();
+          if (adminDoc.exists && adminDoc.data().adminPassword === password) {
+            authManager.isAdmin = true;
+            authManager.showAlert("Admin-Login erfolgreich!", "success");
+            this.checkAdminPage();
+          } else {
+            throw new Error("Ungültige Admin-Credentials");
+          }
+        } catch (error) {
+          authManager.showAlert("Admin-Login fehlgeschlagen: " + error.message, "error");
+          console.error("Admin login error:", error);
+        }
+      }
+
+      // Logout
+      async logout() {
+        await authManager.logout();
+      }
+    }
+
+    const adminPage = new AdminPage();
+
+    // Close modals on click outside
+    document.addEventListener("click", (e) => {
+      const modal = document.getElementById("event-modal");
+      if (e.target === modal) {
+        adminPanel.closeEventModal();
+      }
+    });
+  </script>
+</body>
+</html>
