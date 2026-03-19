@@ -4,6 +4,28 @@ class AdminPanel {
     this.currentTab = "events";
   }
 
+  escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  async guardAdminAccess() {
+    const isAdmin = await authManager.checkAdminStatus(true);
+    if (!isAdmin) {
+      authManager.showAlert("Diese Seite ist nur für Admins verfügbar.", "error");
+      setTimeout(() => {
+        window.location.href = "index.html";
+      }, 1000);
+      return false;
+    }
+
+    return true;
+  }
+
   // Switch Tab
   switchTab(tabName) {
     this.currentTab = tabName;
@@ -12,13 +34,19 @@ class AdminPanel {
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.classList.remove("active");
     });
-    document.querySelector(`[data-tab="${tabName}"]`).classList.add("active");
+    const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+    if (tabButton) {
+      tabButton.classList.add("active");
+    }
 
     // Update content visibility
     document.querySelectorAll(".tab-content").forEach((content) => {
       content.classList.remove("active");
     });
-    document.getElementById(`${tabName}-tab`).classList.add("active");
+    const tabContent = document.getElementById(`${tabName}-tab`);
+    if (tabContent) {
+      tabContent.classList.add("active");
+    }
 
     // Load tab content
     if (tabName === "events") this.loadEventsList();
@@ -30,6 +58,10 @@ class AdminPanel {
   async loadEventsList() {
     const container = document.getElementById("events-list");
     if (!container) return;
+
+    if (!(await this.guardAdminAccess())) {
+      return;
+    }
 
     const events = await eventsManager.loadEvents();
 
@@ -45,17 +77,18 @@ class AdminPanel {
       const available = await eventsManager.getAvailableTickets(event.id);
       const booked = event.capacity - available;
       const date = eventsManager.formatDate(event.date);
+      const title = this.escapeHtml(event.title);
 
       html += `
         <tr>
-          <td><strong>${event.title}</strong></td>
+          <td><strong>${title}</strong></td>
           <td>${date}</td>
           <td>${event.capacity}</td>
           <td>${booked}</td>
           <td>${available}</td>
           <td>
             <button class="btn btn-warning btn-small" onclick="adminPanel.editEventModal('${event.id}')">Bearbeiten</button>
-            <button class="btn btn-danger btn-small" onclick="eventsManager.deleteEvent('${event.id}'); adminPanel.loadEventsList();">Löschen</button>
+            <button class="btn btn-danger btn-small" onclick="adminPanel.handleDeleteEvent('${event.id}')">Löschen</button>
           </td>
         </tr>
       `;
@@ -63,6 +96,13 @@ class AdminPanel {
 
     html += "</tbody></table></div>";
     container.innerHTML = html;
+  }
+
+  async handleDeleteEvent(eventId) {
+    const success = await eventsManager.deleteEvent(eventId);
+    if (success) {
+      await this.loadEventsList();
+    }
   }
 
   // Open Create Event Modal
@@ -117,15 +157,19 @@ class AdminPanel {
     const modalContent = document.getElementById("event-form-content");
     const date = event.date.toDate ? event.date.toDate() : new Date(event.date);
     const dateStr = date.toISOString().split("T")[0];
+    const safeTitle = this.escapeHtml(event.title);
+    const safeDescription = this.escapeHtml(event.description);
+    const safeTime = this.escapeHtml(event.time);
+    const safeLocation = this.escapeHtml(event.location || "");
 
     modalContent.innerHTML = `
       <div class="form-group">
         <label>Veranstaltungstitel *</label>
-        <input type="text" id="event-title" value="${event.title}" required />
+        <input type="text" id="event-title" value="${safeTitle}" required />
       </div>
       <div class="form-group">
         <label>Beschreibung *</label>
-        <textarea id="event-description" rows="4" required>${event.description}</textarea>
+        <textarea id="event-description" rows="4" required>${safeDescription}</textarea>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
         <div class="form-group">
@@ -134,7 +178,7 @@ class AdminPanel {
         </div>
         <div class="form-group">
           <label>Uhrzeit *</label>
-          <input type="time" id="event-time" value="${event.time}" required />
+          <input type="time" id="event-time" value="${safeTime}" required />
         </div>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -144,7 +188,7 @@ class AdminPanel {
         </div>
         <div class="form-group">
           <label>Ort</label>
-          <input type="text" id="event-location" value="${event.location || ""}" />
+          <input type="text" id="event-location" value="${safeLocation}" />
         </div>
       </div>
       <div class="form-group">
@@ -158,13 +202,17 @@ class AdminPanel {
 
   // Save Event
   async saveEvent(eventId = null) {
+    if (!(await this.guardAdminAccess())) {
+      return;
+    }
+
     const eventData = {
-      title: document.getElementById("event-title").value,
-      description: document.getElementById("event-description").value,
+      title: document.getElementById("event-title").value.trim(),
+      description: document.getElementById("event-description").value.trim(),
       date: document.getElementById("event-date").value,
       time: document.getElementById("event-time").value,
       capacity: document.getElementById("event-capacity").value,
-      location: document.getElementById("event-location").value
+      location: document.getElementById("event-location").value.trim()
     };
 
     // Validation
@@ -185,13 +233,20 @@ class AdminPanel {
 
   // Close Event Modal
   closeEventModal() {
-    document.getElementById("event-modal").classList.remove("active");
+    const modal = document.getElementById("event-modal");
+    if (modal) {
+      modal.classList.remove("active");
+    }
   }
 
   // Load Bookings List
   async loadBookingsList() {
     const container = document.getElementById("bookings-list");
     if (!container) return;
+
+    if (!(await this.guardAdminAccess())) {
+      return;
+    }
 
     container.innerHTML = '<div class="spinner"></div> Lade Buchungen...';
 
@@ -207,21 +262,24 @@ class AdminPanel {
 
     for (const booking of bookings) {
       const event = await eventsManager.getEventById(booking.eventId);
-      const eventName = event ? event.title : "Unbekannt";
-      const date = booking.createdAt.toDate ? booking.createdAt.toDate().toLocaleDateString("de-DE") : "N/A";
+      const eventName = this.escapeHtml(event ? event.title : "Gelöschtes Event");
+      const date = booking.createdAt?.toDate ? booking.createdAt.toDate().toLocaleDateString("de-DE") : "N/A";
       const checkedInBadge = booking.checkedIn ? "✓ Eingecheckt" : "Ausstehend";
+      const ticket = this.escapeHtml(booking.ticketNumber || "-");
+      const userName = this.escapeHtml(booking.userName || "-");
+      const userEmail = this.escapeHtml(booking.userEmail || "-");
 
       html += `
         <tr>
-          <td><code style="font-size: 0.8rem;">${booking.ticketNumber}</code></td>
-          <td>${booking.userName}</td>
-          <td>${booking.userEmail}</td>
+          <td><code style="font-size: 0.8rem;">${ticket}</code></td>
+          <td>${userName}</td>
+          <td>${userEmail}</td>
           <td>${eventName}</td>
           <td>${date}</td>
           <td>${checkedInBadge}</td>
           <td>
             ${!booking.checkedIn ? `<button class="btn btn-success btn-small" onclick="adminPanel.checkInBooking('${booking.id}')">Einchecken</button>` : ""}
-            <button class="btn btn-danger btn-small" onclick="bookingManager.cancelBooking('${booking.id}'); adminPanel.loadBookingsList();">Stornieren</button>
+            <button class="btn btn-danger btn-small" onclick="adminPanel.handleCancelBooking('${booking.id}')">Stornieren</button>
           </td>
         </tr>
       `;
@@ -239,10 +297,19 @@ class AdminPanel {
     container.innerHTML = html;
   }
 
+  async handleCancelBooking(bookingId) {
+    const success = await bookingManager.cancelBooking(bookingId);
+    if (success) {
+      await this.loadBookingsList();
+    }
+  }
+
   // Check In Booking
   async checkInBooking(bookingId) {
-    await bookingManager.checkInBooking(bookingId);
-    this.loadBookingsList();
+    const success = await bookingManager.checkInBooking(bookingId);
+    if (success) {
+      await this.loadBookingsList();
+    }
   }
 
   // Load Settings
@@ -250,33 +317,30 @@ class AdminPanel {
     const container = document.getElementById("settings-tab");
     if (!container) return;
 
-    const adminConfig = await bookingManager.getAdminConfig();
+    if (!(await this.guardAdminAccess())) {
+      return;
+    }
+
+    const publicConfig = await bookingManager.getPublicConfig();
+    const supportEmail = this.escapeHtml(publicConfig?.supportEmail || authManager.currentUser?.email || "");
+    const mailFromName = this.escapeHtml(publicConfig?.mailFromName || "Chor Konzert Team");
+    const defaultTestEmail = this.escapeHtml(authManager.currentUser?.email || "");
 
     container.innerHTML = `
       <div class="card">
-        <h3>Email-Konfiguration</h3>
-        <p style="color: #6b7280; margin-bottom: 1.5rem;">Konfiguriere die Email-Adresse, von der Bestätigungsmails versendet werden.</p>
+        <h3>Öffentliche App-Konfiguration</h3>
+        <p style="color: #6b7280; margin-bottom: 1.5rem;">Diese Werte sind für die UI sichtbar und enthalten keine Secrets.</p>
 
         <div class="form-group">
-          <label>Versand-Email-Adresse *</label>
-          <input type="email" id="sender-email" value="${adminConfig?.senderEmail || ""}" placeholder="noreply@example.com" required />
-          <small>Dies ist die Absender-Email-Adresse für Bestätigungsmails</small>
+          <label>Support-Email-Adresse *</label>
+          <input type="email" id="support-email" value="${supportEmail}" placeholder="kontakt@example.com" required />
+          <small>Diese Adresse wird in Buchungsbestätigungen als Kontakt angezeigt.</small>
         </div>
 
         <div class="form-group">
-          <label>Email-Passwort / App-Passwort *</label>
-          <input type="password" id="sender-password" placeholder="••••••••" />
-          <small>Verwende ein App-Password oder SMTP-Passwort (wird sicher gespeichert)</small>
-        </div>
-
-        <div class="form-group">
-          <label>SMTP Server (Optional)</label>
-          <input type="text" id="smtp-server" value="${adminConfig?.smtpServer || ""}" placeholder="smtp.gmail.com" />
-        </div>
-
-        <div class="form-group">
-          <label>SMTP Port (Optional)</label>
-          <input type="number" id="smtp-port" value="${adminConfig?.smtpPort || "587"}" placeholder="587" />
+          <label>Absender-Name *</label>
+          <input type="text" id="mail-from-name" value="${mailFromName}" placeholder="Chor Konzert Team" required />
+          <small>Name, der in der Bestätigungsmail als Absender erscheint.</small>
         </div>
 
         <div class="form-group">
@@ -285,16 +349,16 @@ class AdminPanel {
 
         <hr style="margin: 2rem 0; border: none; border-top: 1px solid #e5e7eb;">
 
-        <h3>Admin-Konfiguration</h3>
+        <h3>Mail-System testen</h3>
         <div class="form-group">
-          <label>Admin-Email *</label>
-          <input type="email" id="admin-email" value="${adminConfig?.adminEmail || authManager.currentUser?.email || ""}" disabled />
-          <small>Dies ist deine Admin-Email (Grundeinstellung bei der Konfiguration)</small>
+          <label>Test-Email-Adresse</label>
+          <input type="email" id="test-email" value="${defaultTestEmail}" placeholder="test@example.com" />
         </div>
+        <button class="btn btn-outline" onclick="adminPanel.sendTestEmail()">Testmail senden</button>
 
         <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
           <p style="margin: 0; color: #7f1d1d; font-size: 0.9rem;">
-            <strong>⚠️ Hinweis:</strong> Admin-Passwort kann nur direkt in Firestore in der Collection <code>admin</code> verändert werden (für Sicherheit).
+            <strong>⚠️ Hinweis:</strong> SMTP-Zugangsdaten und Admin-Allowlist werden ausschließlich über Firebase Functions Secrets gesetzt, nicht im Firestore.
           </p>
         </div>
       </div>
@@ -303,39 +367,60 @@ class AdminPanel {
 
   // Save Settings
   async saveSettings() {
-    const senderEmail = document.getElementById("sender-email").value.trim();
-    const senderPassword = document.getElementById("sender-password").value;
-    const smtpServer = document.getElementById("smtp-server").value.trim();
-    const smtpPort = document.getElementById("smtp-port").value.trim();
+    if (!(await this.guardAdminAccess())) {
+      return;
+    }
 
-    if (!senderEmail) {
-      authManager.showAlert("Bitte gib eine Versand-Email-Adresse ein.", "error");
+    const supportEmail = document.getElementById("support-email").value.trim();
+    const mailFromName = document.getElementById("mail-from-name").value.trim();
+
+    if (!supportEmail || !mailFromName) {
+      authManager.showAlert("Bitte alle Pflichtfelder ausfüllen.", "error");
       return;
     }
 
     try {
-      const adminDoc = await db.collection("admin").doc("config").get();
-      const currentAdmin = adminDoc.exists ? adminDoc.data() : {};
+      await db.collection("appConfig").doc("public").set({
+        supportEmail,
+        mailFromName,
+        updatedAt: new Date(),
+        updatedBy: authManager.currentUser?.uid || null
+      }, { merge: true });
 
-      const updates = {
-        ...currentAdmin,
-        senderEmail: senderEmail,
-        smtpServer: smtpServer || "",
-        smtpPort: parseInt(smtpPort) || 587,
-        updatedAt: new Date()
-      };
-
-      // Only update password if provided
-      if (senderPassword) {
-        updates.senderPassword = senderPassword;
-      }
-
-      await db.collection("admin").doc("config").set(updates, { merge: true });
+      await bookingManager.getPublicConfig(true);
       authManager.showAlert("Einstellungen gespeichert!", "success");
       this.loadSettings();
     } catch (error) {
       console.error("Error saving settings:", error);
       authManager.showAlert("Fehler beim Speichern. " + error.message, "error");
+    }
+  }
+
+  async sendTestEmail() {
+    if (!(await this.guardAdminAccess())) {
+      return;
+    }
+
+    if (!firebaseFunctions) {
+      authManager.showAlert("Cloud Functions sind nicht initialisiert.", "error");
+      return;
+    }
+
+    const testInput = document.getElementById("test-email");
+    const testEmail = (testInput?.value || authManager.currentUser?.email || "").trim();
+
+    if (!testEmail) {
+      authManager.showAlert("Bitte eine Test-Email angeben.", "error");
+      return;
+    }
+
+    try {
+      const callable = firebaseFunctions.httpsCallable("sendTestEmail");
+      await callable({ testEmail });
+      authManager.showAlert("Testmail wurde versendet.", "success");
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      authManager.showAlert("Testmail fehlgeschlagen: " + (error.message || "Unbekannter Fehler"), "error");
     }
   }
 }

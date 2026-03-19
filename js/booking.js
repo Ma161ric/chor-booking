@@ -3,6 +3,16 @@ class BookingManager {
   constructor() {
     this.bookings = [];
     this.currentBooking = null;
+    this.publicConfigCache = null;
+  }
+
+  escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   // Generate Unique Ticket Number
@@ -25,54 +35,117 @@ class BookingManager {
     }
 
     try {
-      // Check available tickets
-      const available = await eventsManager.getAvailableTickets(eventId);
-      if (available <= 0) {
-        authManager.showAlert("Dieser Event ist ausverkauft!", "error");
-        return null;
-      }
+      const user = authManager.currentUser;
+      const bookingRef = db.collection("bookings").doc();
+      const eventRef = db.collection("events").doc(eventId);
+      const userRef = db.collection("users").doc(user.uid);
 
-      const ticketNumber = this.generateTicketNumber();
-      const qrCodeUrl = this.generateQRCode(ticketNumber);
+      const newBooking = await db.runTransaction(async (transaction) => {
+        const [eventDoc, userDoc] = await Promise.all([
+          transaction.get(eventRef),
+          transaction.get(userRef)
+        ]);
 
-      const booking = {
-        eventId: eventId,
-        userId: authManager.currentUser.uid,
-        userEmail: authManager.currentUser.email,
-        userName: userData.name || authManager.currentUser.email,
-        ticketNumber: ticketNumber,
-        qrCodeUrl: qrCodeUrl,
-        status: "confirmed",
-        createdAt: new Date(),
-        checkedIn: false,
-        checkedInAt: null
-      };
+        if (!eventDoc.exists) {
+          throw new Error("EVENT_NOT_FOUND");
+        }
 
-      // Save booking to Firestore
-      const docRef = await db.collection("bookings").add(booking);
+        const eventData = eventDoc.data();
+        const capacity = Number.parseInt(eventData.capacity, 10) || 0;
+        const bookingCount = Number.parseInt(eventData.bookingCount, 10) || 0;
 
-      // Update user's booking list
-      await db.collection("users").doc(authManager.currentUser.uid).update({
-        bookings: firebase.firestore.FieldValue.arrayUnion(docRef.id)
+        if (capacity < 1) {
+          throw new Error("EVENT_INVALID_CAPACITY");
+        }
+
+        if (bookingCount >= capacity) {
+          throw new Error("EVENT_SOLD_OUT");
+        }
+
+        const safeName = (userData.name || user.displayName || user.email || "Gast").trim();
+        const ticketNumber = this.generateTicketNumber();
+        const qrCodeUrl = this.generateQRCode(ticketNumber);
+
+        const booking = {
+          eventId,
+          userId: user.uid,
+          userEmail: user.email,
+          userName: safeName,
+          ticketNumber,
+          qrCodeUrl,
+          status: "confirmed",
+          createdAt: new Date(),
+          checkedIn: false,
+          checkedInAt: null,
+          emailStatus: "pending"
+        };
+
+        transaction.set(bookingRef, booking);
+        transaction.update(eventRef, {
+          bookingCount: bookingCount + 1,
+          updatedAt: new Date()
+        });
+
+        if (userDoc.exists) {
+          transaction.update(userRef, {
+            bookings: firebase.firestore.FieldValue.arrayUnion(bookingRef.id),
+            updatedAt: new Date()
+          });
+        } else {
+          transaction.set(userRef, {
+            uid: user.uid,
+            email: user.email,
+            name: safeName,
+            role: "user",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            bookings: [bookingRef.id]
+          }, { merge: true });
+        }
+
+        return {
+          id: bookingRef.id,
+          ...booking,
+          eventTitle: eventData.title || "Event",
+          eventDate: eventData.date || null,
+          eventTime: eventData.time || "",
+          eventLocation: eventData.location || ""
+        };
       });
 
       authManager.showAlert("Ticket erfolgreich gebucht!", "success");
-      this.currentBooking = { id: docRef.id, ...booking };
+      this.currentBooking = newBooking;
       return this.currentBooking;
     } catch (error) {
       console.error("Error creating booking:", error);
-      authManager.showAlert("Fehler beim Buchen des Tickets. " + error.message, "error");
+
+      const code = error.message || error.code;
+      if (code === "EVENT_NOT_FOUND") {
+        authManager.showAlert("Dieses Event wurde gelöscht oder ist nicht mehr verfügbar.", "error");
+      } else if (code === "EVENT_SOLD_OUT") {
+        authManager.showAlert("Dieses Event ist leider ausverkauft.", "error");
+      } else if (code === "EVENT_INVALID_CAPACITY") {
+        authManager.showAlert("Dieses Event ist aktuell nicht buchbar.", "error");
+      } else {
+        authManager.showAlert("Fehler beim Buchen des Tickets. " + (error.message || "Unbekannter Fehler"), "error");
+      }
+
       return null;
     }
   }
 
-  // Get Admin Configuration
-  async getAdminConfig() {
+  // Public configuration (safe for client)
+  async getPublicConfig(forceRefresh = false) {
+    if (this.publicConfigCache && !forceRefresh) {
+      return this.publicConfigCache;
+    }
+
     try {
-      const adminDoc = await db.collection("admin").doc("config").get();
-      return adminDoc.exists ? adminDoc.data() : null;
+      const configDoc = await db.collection("appConfig").doc("public").get();
+      this.publicConfigCache = configDoc.exists ? configDoc.data() : null;
+      return this.publicConfigCache;
     } catch (error) {
-      console.error("Error getting admin config:", error);
+      console.error("Error getting public config:", error);
       return null;
     }
   }
@@ -100,8 +173,7 @@ class BookingManager {
 
   // Get All Bookings (Admin Only)
   async getAllBookings() {
-    if (!authManager.isAdmin) {
-      authManager.showAlert("Du hast keine Berechtigung.", "error");
+    if (!(await authManager.ensureAdmin())) {
       return [];
     }
 
@@ -123,13 +195,23 @@ class BookingManager {
 
   // Check In Booking (Admin Only)
   async checkInBooking(bookingId) {
-    if (!authManager.isAdmin) {
-      authManager.showAlert("Du hast keine Berechtigung.", "error");
+    if (!(await authManager.ensureAdmin())) {
       return false;
     }
 
     try {
-      await db.collection("bookings").doc(bookingId).update({
+      const bookingDoc = await db.collection("bookings").doc(bookingId).get();
+      if (!bookingDoc.exists) {
+        authManager.showAlert("Buchung wurde bereits gelöscht.", "warning");
+        return false;
+      }
+
+      if (bookingDoc.data().checkedIn) {
+        authManager.showAlert("Ticket ist bereits eingecheckt.", "warning");
+        return true;
+      }
+
+      await bookingDoc.ref.update({
         checkedIn: true,
         checkedInAt: new Date()
       });
@@ -145,27 +227,62 @@ class BookingManager {
 
   // Cancel Booking
   async cancelBooking(bookingId) {
+    if (!authManager.currentUser) {
+      authManager.showAlert("Bitte zuerst einloggen.", "error");
+      return false;
+    }
+
     try {
-      const bookingDoc = await db.collection("bookings").doc(bookingId).get();
-      if (!bookingDoc.exists) {
-        authManager.showAlert("Buchung nicht gefunden.", "error");
-        return false;
-      }
+      const user = authManager.currentUser;
+      const isAdmin = await authManager.checkAdminStatus();
+      const bookingRef = db.collection("bookings").doc(bookingId);
 
-      const booking = bookingDoc.data();
+      await db.runTransaction(async (transaction) => {
+        const bookingDoc = await transaction.get(bookingRef);
+        if (!bookingDoc.exists) {
+          throw new Error("BOOKING_NOT_FOUND");
+        }
 
-      // User can only cancel their own bookings
-      if (booking.userId !== authManager.currentUser.uid && !authManager.isAdmin) {
-        authManager.showAlert("Du darfst nur deine eigenen Buchungen stornieren.", "error");
-        return false;
-      }
+        const booking = bookingDoc.data();
+        const canCancel = booking.userId === user.uid || isAdmin;
+        if (!canCancel) {
+          throw new Error("BOOKING_FORBIDDEN");
+        }
 
-      await db.collection("bookings").doc(bookingId).delete();
+        const eventRef = db.collection("events").doc(booking.eventId);
+        const eventDoc = await transaction.get(eventRef);
+        if (eventDoc.exists) {
+          const eventData = eventDoc.data();
+          const bookingCount = Number.parseInt(eventData.bookingCount, 10) || 0;
+          transaction.update(eventRef, {
+            bookingCount: Math.max(0, bookingCount - 1),
+            updatedAt: new Date()
+          });
+        }
+
+        const userRef = db.collection("users").doc(booking.userId);
+        const bookingOwnerDoc = await transaction.get(userRef);
+        if (bookingOwnerDoc.exists) {
+          transaction.update(userRef, {
+            bookings: firebase.firestore.FieldValue.arrayRemove(bookingId),
+            updatedAt: new Date()
+          });
+        }
+
+        transaction.delete(bookingRef);
+      });
+
       authManager.showAlert("Buchung storniert!", "success");
       return true;
     } catch (error) {
       console.error("Error canceling booking:", error);
-      authManager.showAlert("Fehler beim Stornieren der Buchung.", "error");
+      if (error.message === "BOOKING_NOT_FOUND") {
+        authManager.showAlert("Buchung existiert nicht mehr.", "warning");
+      } else if (error.message === "BOOKING_FORBIDDEN") {
+        authManager.showAlert("Du darfst nur eigene Buchungen stornieren.", "error");
+      } else {
+        authManager.showAlert("Fehler beim Stornieren der Buchung.", "error");
+      }
       return false;
     }
   }
@@ -185,13 +302,17 @@ class BookingManager {
     let html = "<div class='bookings-list'>";
     for (const booking of bookings) {
       const event = await eventsManager.getEventById(booking.eventId);
+      const eventTitle = this.escapeHtml(event ? event.title : "Gelöschtes Event");
+      const ticketNumber = this.escapeHtml(booking.ticketNumber);
+      const status = this.escapeHtml(booking.status === "confirmed" ? "✓ Bestätigt" : booking.status);
+
       html += `
         <div class="card">
-          <h3>${event ? event.title : "Unbekanntes Event"}</h3>
+          <h3>${eventTitle}</h3>
           <div class="event-details">
             <div class="event-detail-row">
               <strong>Ticketnummer:</strong>
-              <code>${booking.ticketNumber}</code>
+              <code>${ticketNumber}</code>
             </div>
             <div class="event-detail-row">
               <strong>Datum:</strong>
@@ -199,7 +320,7 @@ class BookingManager {
             </div>
             <div class="event-detail-row">
               <strong>Status:</strong>
-              <span>${booking.status === "confirmed" ? "✓ Bestätigt" : booking.status}</span>
+              <span>${status}</span>
             </div>
             ${booking.checkedIn ? `<div class="event-detail-row"><strong>Eingecheckt:</strong> ✓ Ja</div>` : ""}
           </div>
@@ -221,7 +342,10 @@ class BookingManager {
   async openBookingModal(eventId, eventTitle) {
     if (!authManager.currentUser) {
       authManager.showAlert("Bitte logge dich ein, um ein Ticket zu buchen.", "error");
-      document.getElementById("auth-container").scrollIntoView({ behavior: "smooth" });
+      const authContainer = document.getElementById("auth-container");
+      if (authContainer) {
+        authContainer.scrollIntoView({ behavior: "smooth" });
+      }
       return;
     }
 
@@ -237,11 +361,11 @@ class BookingManager {
     modalContent.innerHTML = `
       <div class="form-group">
         <label>Event</label>
-        <input type="text" value="${eventTitle}" disabled />
+        <input type="text" value="${this.escapeHtml(eventTitle)}" disabled />
       </div>
       <div class="form-group">
         <label>Dein Name *</label>
-        <input type="text" id="booking-name" placeholder="Dein Name" value="${authManager.currentUser.displayName || ""}" required />
+        <input type="text" id="booking-name" placeholder="Dein Name" value="${this.escapeHtml(authManager.currentUser.displayName || "")}" required />
       </div>
       <div class="form-group">
         <label>E-Mail *</label>
@@ -262,7 +386,8 @@ class BookingManager {
 
   // Confirm Booking
   async confirmBooking(eventId) {
-    const name = document.getElementById("booking-name").value.trim();
+    const nameInput = document.getElementById("booking-name");
+    const name = nameInput ? nameInput.value.trim() : "";
     if (!name) {
       authManager.showAlert("Bitte gib deinen Namen ein.", "error");
       return;
@@ -279,16 +404,24 @@ class BookingManager {
     const modal = document.getElementById("booking-modal");
     const modalContent = document.getElementById("booking-form-content");
 
+    const eventDate = booking.eventDate?.toDate
+      ? booking.eventDate.toDate().toLocaleDateString("de-DE")
+      : booking.eventDate
+        ? new Date(booking.eventDate).toLocaleDateString("de-DE")
+        : "Wird in der Email bestätigt";
+
     modalContent.innerHTML = `
       <div style="text-align: center;">
         <h2>✓ Ticket erfolgreich gebucht!</h2>
         <p>Deine Bestätigungsemail wird in Kürze versendet.</p>
+        <p><strong>${this.escapeHtml(booking.eventTitle || "Event")}</strong></p>
+        <p>${this.escapeHtml(eventDate)} ${this.escapeHtml(booking.eventTime || "")}</p>
         <div class="qr-container">
           <img src="${booking.qrCodeUrl}" alt="QR Code" />
         </div>
         <div class="card" style="background: #f0fdf4; border-left: 4px solid #10b981;">
           <p><strong>Ticketnummer:</strong></p>
-          <p style="font-family: monospace; font-size: 1.2rem; letter-spacing: 2px;">${booking.ticketNumber}</p>
+          <p style="font-family: monospace; font-size: 1.2rem; letter-spacing: 2px;">${this.escapeHtml(booking.ticketNumber)}</p>
         </div>
         <p><small>Speichere diese Ticketnummer oder zeige den QR-Code am Event.</small></p>
         <button class="btn btn-primary btn-block" onclick="bookingManager.closeBookingModal()">
@@ -301,13 +434,14 @@ class BookingManager {
   // Close Booking Modal
   closeBookingModal() {
     const modal = document.getElementById("booking-modal");
-    modal.classList.remove("active");
+    if (modal) {
+      modal.classList.remove("active");
+    }
   }
 
   // Export Bookings to CSV (Admin Only)
   async exportBookingsToCSV() {
-    if (!authManager.isAdmin) {
-      authManager.showAlert("Du hast keine Berechtigung.", "error");
+    if (!(await authManager.ensureAdmin())) {
       return;
     }
 
@@ -333,7 +467,9 @@ class BookingManager {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `bookings_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
     link.click();
+    link.remove();
 
     authManager.showAlert("Buchungen exportiert!", "success");
   }

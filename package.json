@@ -1,0 +1,9 @@
+{
+  "name": "chor-booking",
+  "private": true,
+  "scripts": {
+    "lint:functions": "npm --prefix functions run lint",
+    "deploy:firebase": "firebase deploy --only firestore:rules,firestore:indexes,functions",
+    "serve:emulators": "firebase emulators:start --only firestore,functions"
+  }
+}

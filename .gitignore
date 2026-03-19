@@ -10,7 +10,6 @@ Thumbs.db
 
 # Node modules (if using npm)
 node_modules/
-package-lock.json
 yarn.lock
 
 # Build outputs
@@ -26,7 +25,10 @@ build/
 
 # Firebase
 .firebase/
-.firebaserc
+
+# Firebase local/runtime files
+functions/.runtimeconfig.json
+functions/.secret.local
 
 # Temp files
 *.tmp

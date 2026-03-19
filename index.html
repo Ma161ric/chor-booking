@@ -98,7 +98,12 @@
             authManager.showAlert("Bitte fülle alle Felder aus.", "error");
             return;
           }
-          await authManager.login(email, password);
+
+          try {
+            await authManager.login(email, password);
+          } catch (error) {
+            console.error("Login failed:", error);
+          }
         }
 
         // Handle Register
@@ -118,7 +123,11 @@
             return;
           }
 
-          await authManager.register(email, password, name);
+          try {
+            await authManager.register(email, password, name);
+          } catch (error) {
+            console.error("Registration failed:", error);
+          }
         }
       </script>
     </div>
@@ -171,6 +180,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
 
   <!-- Our JavaScript Files -->
   <script src="js/firebase-config.js"></script>
@@ -187,10 +197,16 @@
           // User is logged in - load content
           await eventsManager.displayEvents("events-container");
           await bookingManager.displayUserBookings("bookings-container");
-
-          // Check if admin and show button
-          if (authManager.isAdmin) {
-            document.getElementById("admin-btn").style.display = "block";
+          await authManager.checkAdminStatus();
+          authManager.updateUI();
+        } else {
+          const eventsContainer = document.getElementById("events-container");
+          const bookingsContainer = document.getElementById("bookings-container");
+          if (eventsContainer) {
+            eventsContainer.innerHTML = "<p>Bitte melde dich an, um verfügbare Events zu sehen.</p>";
+          }
+          if (bookingsContainer) {
+            bookingsContainer.innerHTML = "<p>Bitte melde dich an, um deine Tickets zu sehen.</p>";
           }
         }
       });

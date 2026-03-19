@@ -42,10 +42,8 @@
 
       <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.9rem;">
         <p style="margin: 0; color: #0c2d6b;">
-          📌 Bei der ersten Anmeldung:
-          <br>1. Erstelle ein Firebase-Projekt
-          <br>2. Erstelle einen Admin-Eintrag in Firestore
-          <br>3. Verwende die Credentials hier
+          📌 Admin-Zugriff wird über Firebase Auth + Admin-Claim geprüft.
+          <br>Falls deine Email in der Admin-Allowlist liegt, wird der Claim automatisch vergeben.
         </p>
       </div>
     </div>
@@ -113,6 +111,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
 
   <!-- Our JavaScript Files -->
   <script src="js/firebase-config.js"></script>
@@ -125,20 +124,28 @@
   <script>
     class AdminPage {
       constructor() {
+        this.isProcessingLogin = false;
         this.checkAdminPage();
       }
 
       // Check if page should show login or admin panel
       checkAdminPage() {
         auth.onAuthStateChanged(async (user) => {
-          if (user && await authManager.checkAdminStatus()) {
+          if (user && await authManager.checkAdminStatus(true)) {
             document.getElementById("admin-login").style.display = "none";
+            document.getElementById("admin-panel").style.display = "block";
             document.getElementById("admin-panel").classList.add("active");
             adminPanel.switchTab("events");
           } else if (!user) {
             document.getElementById("admin-login").style.display = "block";
+            document.getElementById("admin-panel").style.display = "none";
             document.getElementById("admin-panel").classList.remove("active");
+            this.isProcessingLogin = false;
           } else {
+            if (this.isProcessingLogin) {
+              return;
+            }
+
             authManager.showAlert("Diese Seite ist nur für Admins zugänglich.", "error");
             setTimeout(() => window.location.href = "index.html", 2000);
           }
@@ -155,10 +162,13 @@
           return;
         }
 
+        this.isProcessingLogin = true;
+
         try {
           await authManager.adminLogin(email, password);
-          this.checkAdminPage();
+          this.isProcessingLogin = false;
         } catch (error) {
+          this.isProcessingLogin = false;
           authManager.showAlert("Admin-Login fehlgeschlagen: " + error.message, "error");
           console.error("Admin login error:", error);
         }
@@ -166,7 +176,7 @@
 
       // Logout
       async logout() {
-        await authManager.logout();
+        await authManager.logout("index.html");
       }
     }
 

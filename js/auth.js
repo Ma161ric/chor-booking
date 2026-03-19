@@ -8,10 +8,11 @@ class AuthManager {
 
   // Listen to Auth State Changes
   setupAuthStateListener() {
-    auth.onAuthStateChanged((user) => {
+    auth.onAuthStateChanged(async (user) => {
       this.currentUser = user;
+
       if (user) {
-        this.checkAdminStatus();
+        await this.checkAdminStatus();
         this.updateUI();
       } else {
         this.isAdmin = false;
@@ -20,21 +21,31 @@ class AuthManager {
     });
   }
 
-  // Check if User is Admin
-  async checkAdminStatus() {
-    if (!this.currentUser) return false;
+  // Check if User is Admin by Custom Claim
+  async checkAdminStatus(forceRefresh = false) {
+    if (!this.currentUser) {
+      this.isAdmin = false;
+      return false;
+    }
 
     try {
-      const adminDoc = await db.collection("admin").doc("config").get();
-      if (adminDoc.exists) {
-        const adminEmail = adminDoc.data().adminEmail;
-        this.isAdmin = this.currentUser.email === adminEmail;
-      }
+      const tokenResult = await this.currentUser.getIdTokenResult(forceRefresh);
+      this.isAdmin = !!tokenResult.claims.admin;
       return this.isAdmin;
     } catch (error) {
       console.error("Error checking admin status:", error);
+      this.isAdmin = false;
       return false;
     }
+  }
+
+  async ensureAdmin() {
+    const isAdmin = await this.checkAdminStatus(true);
+    if (!isAdmin) {
+      this.showAlert("Fehlende Berechtigung: Nur Admins dürfen diese Aktion ausführen.", "error");
+      return false;
+    }
+    return true;
   }
 
   // Register New User
@@ -46,14 +57,15 @@ class AuthManager {
       // Save User Data to Firestore
       await db.collection("users").doc(user.uid).set({
         uid: user.uid,
-        email: email,
-        name: name,
+        email,
+        name,
+        role: "user",
         createdAt: new Date(),
+        updatedAt: new Date(),
         bookings: []
-      });
+      }, { merge: true });
 
-      this.showAlert("Registrierung erfolgreich! Du wirst weitergeleitet...", "success");
-      setTimeout(() => location.reload(), 2000);
+      this.showAlert("Registrierung erfolgreich!", "success");
       return user;
     } catch (error) {
       console.error("Registration error:", error);
@@ -63,10 +75,12 @@ class AuthManager {
   }
 
   // Login User
-  async login(email, password) {
+  async login(email, password, showSuccess = true) {
     try {
       const userCredential = await auth.signInWithEmailAndPassword(email, password);
-      this.showAlert("Erfolgreich angemeldet!", "success");
+      if (showSuccess) {
+        this.showAlert("Erfolgreich angemeldet!", "success");
+      }
       return userCredential.user;
     } catch (error) {
       console.error("Login error:", error);
@@ -75,30 +89,42 @@ class AuthManager {
     }
   }
 
-  // Admin Login
+  async bootstrapAdminRole() {
+    if (!firebaseFunctions) {
+      return false;
+    }
+
+    try {
+      const callable = firebaseFunctions.httpsCallable("bootstrapAdminRole");
+      const result = await callable({});
+      return !!result?.data?.success;
+    } catch (error) {
+      console.warn("Admin bootstrap failed:", error);
+      return false;
+    }
+  }
+
+  // Admin Login (claim based)
   async adminLogin(email, password) {
     try {
-      // Verify Admin Credentials
-      const adminDoc = await db.collection("admin").doc("config").get();
-      if (!adminDoc.exists) {
-        throw new Error("Admin-Konfiguration nicht gefunden. Bitte bei Firebase-Setup prüfen.");
+      await this.login(email, password, false);
+
+      let isAdmin = await this.checkAdminStatus(true);
+      if (!isAdmin) {
+        const bootstrapped = await this.bootstrapAdminRole();
+        if (bootstrapped && this.currentUser) {
+          await this.currentUser.getIdToken(true);
+          isAdmin = await this.checkAdminStatus(true);
+        }
       }
 
-      const adminData = adminDoc.data();
-      if (adminData.adminEmail !== email) {
-        throw new Error("Ungültige Admin-Email");
+      if (!isAdmin) {
+        await auth.signOut();
+        throw new Error("Kein Admin-Zugriff. Diese Email ist nicht als Admin freigeschaltet.");
       }
 
-      // Check Admin Password
-      if (adminData.adminPassword !== password) {
-        throw new Error("Ungültiges Admin-Passwort");
-      }
-
-      // Login with Firebase Auth
-      const userCredential = await auth.signInWithEmailAndPassword(email, password);
-      this.isAdmin = true;
       this.showAlert("Admin erfolgreich angemeldet!", "success");
-      return userCredential.user;
+      return this.currentUser;
     } catch (error) {
       console.error("Admin login error:", error);
       this.showAlert(this.getErrorMessage(error), "error");
@@ -107,13 +133,18 @@ class AuthManager {
   }
 
   // Logout User
-  async logout() {
+  async logout(redirectUrl = null) {
     try {
       await auth.signOut();
       this.currentUser = null;
       this.isAdmin = false;
       this.showAlert("Erfolgreich abgemeldet!", "success");
-      setTimeout(() => location.reload(), 1000);
+
+      if (redirectUrl) {
+        setTimeout(() => {
+          window.location.href = redirectUrl;
+        }, 400);
+      }
     } catch (error) {
       console.error("Logout error:", error);
       this.showAlert(this.getErrorMessage(error), "error");
@@ -130,57 +161,74 @@ class AuthManager {
       "auth/wrong-password": "Falsches Passwort.",
       "auth/invalid-credential": "Ungültige Anmeldedaten.",
       "auth/too-many-requests": "Zu viele Anmeldeversuche. Versuche es später.",
+      "permission-denied": "Für diese Aktion fehlen Berechtigungen."
     };
-    return errorMessages[error.code] || error.message;
+
+    return errorMessages[error.code] || error.message || "Unbekannter Fehler.";
   }
 
   // Show/Hide Auth Section
   showAuthSection() {
-    document.querySelectorAll(".auth-page").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".auth-page").forEach((el) => el.classList.remove("active"));
+
     const authContainer = document.getElementById("auth-container");
-    if (authContainer) authContainer.style.display = "block";
+    if (authContainer) {
+      authContainer.style.display = "block";
+    }
 
     const logoutBtn = document.getElementById("logout-btn");
-    if (logoutBtn) logoutBtn.style.display = "none";
+    if (logoutBtn) {
+      logoutBtn.style.display = "none";
+    }
 
     const adminBtn = document.getElementById("admin-btn");
-    if (adminBtn) adminBtn.style.display = "none";
+    if (adminBtn) {
+      adminBtn.style.display = "none";
+    }
   }
 
   // Update UI based on Auth State
   updateUI() {
-    if (!this.currentUser) return;
+    if (!this.currentUser) {
+      return;
+    }
 
     const authContainer = document.getElementById("auth-container");
-    if (authContainer) authContainer.style.display = "none";
-    document.querySelectorAll(".auth-page").forEach(el => el.classList.add("active"));
+    if (authContainer) {
+      authContainer.style.display = "none";
+    }
 
-    // Show Admin Button if Admin
+    document.querySelectorAll(".auth-page").forEach((el) => el.classList.add("active"));
+
     const adminBtn = document.getElementById("admin-btn");
-    if (adminBtn && this.isAdmin) {
-      adminBtn.style.display = "block";
+    if (adminBtn) {
+      adminBtn.style.display = this.isAdmin ? "block" : "none";
     }
 
     const logoutBtn = document.getElementById("logout-btn");
-    if (logoutBtn) logoutBtn.style.display = "block";
+    if (logoutBtn) {
+      logoutBtn.style.display = "block";
+    }
 
-    // Update Header
     const userNameSpan = document.getElementById("user-name");
     if (userNameSpan) {
-      userNameSpan.textContent = this.currentUser.email;
+      userNameSpan.textContent = this.currentUser.displayName || this.currentUser.email || "Nutzer";
     }
   }
 
   // Show Alert Message
   showAlert(message, type = "info") {
     const alertContainer = document.getElementById("alert-container");
-    if (!alertContainer) return;
+    if (!alertContainer) {
+      return;
+    }
 
     const alertDiv = document.createElement("div");
     alertDiv.className = `alert alert-${type}`;
-    alertDiv.innerHTML = `
-      <span>${message}</span>
-    `;
+
+    const text = document.createElement("span");
+    text.textContent = message;
+    alertDiv.appendChild(text);
 
     alertContainer.appendChild(alertDiv);
 
@@ -190,7 +238,9 @@ class AuthManager {
 
   // Get Current User Data
   async getCurrentUserData() {
-    if (!this.currentUser) return null;
+    if (!this.currentUser) {
+      return null;
+    }
 
     try {
       const userDoc = await db.collection("users").doc(this.currentUser.uid).get();
