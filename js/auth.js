@@ -76,7 +76,7 @@ class AuthManager {
   }
 
   // Admin Login
-  async adminLogin(email, password, adminPassword) {
+  async adminLogin(email, password) {
     try {
       // Verify Admin Credentials
       const adminDoc = await db.collection("admin").doc("config").get();
@@ -89,13 +89,13 @@ class AuthManager {
         throw new Error("Ungültige Admin-Email");
       }
 
-      // Check Admin Password (should be hashed in production)
-      if (adminData.adminPassword !== adminPassword) {
+      // Check Admin Password
+      if (adminData.adminPassword !== password) {
         throw new Error("Ungültiges Admin-Passwort");
       }
 
       // Login with Firebase Auth
-      const userCredential = await auth.signInWithEmailAndPassword(email, adminData.firebasePassword || email);
+      const userCredential = await auth.signInWithEmailAndPassword(email, password);
       this.isAdmin = true;
       this.showAlert("Admin erfolgreich angemeldet!", "success");
       return userCredential.user;
@@ -137,14 +137,22 @@ class AuthManager {
   // Show/Hide Auth Section
   showAuthSection() {
     document.querySelectorAll(".auth-page").forEach(el => el.classList.remove("active"));
-    document.getElementById("auth-container").style.display = "block";
+    const authContainer = document.getElementById("auth-container");
+    if (authContainer) authContainer.style.display = "block";
+
+    const logoutBtn = document.getElementById("logout-btn");
+    if (logoutBtn) logoutBtn.style.display = "none";
+
+    const adminBtn = document.getElementById("admin-btn");
+    if (adminBtn) adminBtn.style.display = "none";
   }
 
   // Update UI based on Auth State
   updateUI() {
     if (!this.currentUser) return;
 
-    document.getElementById("auth-container").style.display = "none";
+    const authContainer = document.getElementById("auth-container");
+    if (authContainer) authContainer.style.display = "none";
     document.querySelectorAll(".auth-page").forEach(el => el.classList.add("active"));
 
     // Show Admin Button if Admin
@@ -152,6 +160,9 @@ class AuthManager {
     if (adminBtn && this.isAdmin) {
       adminBtn.style.display = "block";
     }
+
+    const logoutBtn = document.getElementById("logout-btn");
+    if (logoutBtn) logoutBtn.style.display = "block";
 
     // Update Header
     const userNameSpan = document.getElementById("user-name");

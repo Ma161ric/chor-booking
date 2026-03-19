@@ -56,9 +56,6 @@ class BookingManager {
         bookings: firebase.firestore.FieldValue.arrayUnion(docRef.id)
       });
 
-      // Trigger Cloud Function for Email (via custom call or webhook)
-      await this.triggerBookingEmail(booking, docRef.id);
-
       authManager.showAlert("Ticket erfolgreich gebucht!", "success");
       this.currentBooking = { id: docRef.id, ...booking };
       return this.currentBooking;
@@ -66,35 +63,6 @@ class BookingManager {
       console.error("Error creating booking:", error);
       authManager.showAlert("Fehler beim Buchen des Tickets. " + error.message, "error");
       return null;
-    }
-  }
-
-  // Trigger Booking Email (Cloud Function)
-  async triggerBookingEmail(booking, bookingId) {
-    try {
-      // Get event details
-      const event = await eventsManager.getEventById(booking.eventId);
-      if (!event) return;
-
-      // Call Cloud Function via HTTP trigger
-      // This assumes you have set up a Cloud Function endpoint
-      const response = await fetch("/.netlify/functions/sendBookingEmail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId: bookingId,
-          booking: booking,
-          event: event,
-          adminConfig: await this.getAdminConfig()
-        })
-      });
-
-      if (!response.ok) {
-        console.warn("Email sending may have failed (non-critical)");
-      }
-    } catch (error) {
-      console.warn("Email trigger error (non-critical):", error);
-      // Non-blocking error - booking is still saved
     }
   }
 
@@ -354,7 +322,8 @@ class BookingManager {
     for (const booking of bookings) {
       const event = await eventsManager.getEventById(booking.eventId);
       const eventName = event ? event.title : "Unbekannt";
-      const date = booking.createdAt.toDate().toLocaleDateString("de-DE");
+      const createdAt = booking.createdAt?.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt);
+      const date = createdAt.toLocaleDateString("de-DE");
 
       csv += `"${booking.ticketNumber}","${booking.userName}","${booking.userEmail}","${eventName}","${date}","${booking.status}"\n`;
     }

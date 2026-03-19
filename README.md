@@ -201,8 +201,8 @@ chor-booking/
 ### "Firebase is not defined"
 - Stelle sicher, dass beide Firebase SDKs in index.html/admin.html eingebunden sind:
 ```html
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 ```
 
 ### Email-Versand funktioniert nicht

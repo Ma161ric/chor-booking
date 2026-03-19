@@ -110,9 +110,9 @@
   </div>
 
   <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
   <!-- Our JavaScript Files -->
   <script src="js/firebase-config.js"></script>
@@ -131,7 +131,7 @@
       // Check if page should show login or admin panel
       checkAdminPage() {
         auth.onAuthStateChanged(async (user) => {
-          if (user && authManager.isAdmin) {
+          if (user && await authManager.checkAdminStatus()) {
             document.getElementById("admin-login").style.display = "none";
             document.getElementById("admin-panel").classList.add("active");
             adminPanel.switchTab("events");
@@ -155,20 +155,9 @@
           return;
         }
 
-        // For now, show instructions (real implementation requires specific setup)
         try {
-          // Try direct login with Firebase
-          const userCredential = await auth.signInWithEmailAndPassword(email, password);
-          
-          // Then verify through admin password check
-          const adminDoc = await db.collection("admin").doc("config").get();
-          if (adminDoc.exists && adminDoc.data().adminPassword === password) {
-            authManager.isAdmin = true;
-            authManager.showAlert("Admin-Login erfolgreich!", "success");
-            this.checkAdminPage();
-          } else {
-            throw new Error("Ungültige Admin-Credentials");
-          }
+          await authManager.adminLogin(email, password);
+          this.checkAdminPage();
         } catch (error) {
           authManager.showAlert("Admin-Login fehlgeschlagen: " + error.message, "error");
           console.error("Admin login error:", error);
