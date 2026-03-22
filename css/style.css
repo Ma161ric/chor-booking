@@ -688,8 +688,8 @@ textarea {
   max-height: 92vh;
   overflow: auto;
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(214, 209, 196, 0.9);
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--surface);
   box-shadow: 0 22px 50px rgba(17, 23, 37, 0.34);
   padding: var(--space-6);
 }
@@ -733,7 +733,7 @@ textarea {
   height: 2rem;
   border-radius: 999px;
   font-size: 1.1rem;
-  color: #505869;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -1182,6 +1182,18 @@ hr {
     background: #3a1f20;
     color: #ffd7d4;
     border-color: #7a3e40;
+  }
+
+  .booking-success-ticket {
+    background: #173629;
+    border-color: #2d5f49;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus,
+  .btn:focus-visible {
+    box-shadow: 0 0 0 3px rgba(117, 168, 216, 0.35);
   }
 
   .alert-success {
