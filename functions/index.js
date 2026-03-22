@@ -396,29 +396,29 @@ exports.cancelBooking = functions
 				}
 
 				const eventId = String(booking.eventId || "").trim();
-				if (eventId) {
-					const eventRef = db.collection("events").doc(eventId);
-					const eventDoc = await transaction.get(eventRef);
-					if (eventDoc.exists) {
-						const eventData = eventDoc.data() || {};
-						const currentCount = Number.parseInt(eventData.bookingCount, 10) || 0;
-						transaction.update(eventRef, {
-							bookingCount: Math.max(0, currentCount - 1),
-							updatedAt: now
-						});
-					}
+				const bookingOwnerId = String(booking.userId || "").trim();
+				const eventRef = eventId ? db.collection("events").doc(eventId) : null;
+				const userRef = bookingOwnerId ? db.collection("users").doc(bookingOwnerId) : null;
+
+				const [eventDoc, userDoc] = await Promise.all([
+					eventRef ? transaction.get(eventRef) : Promise.resolve(null),
+					userRef ? transaction.get(userRef) : Promise.resolve(null)
+				]);
+
+				if (eventRef && eventDoc && eventDoc.exists) {
+					const eventData = eventDoc.data() || {};
+					const currentCount = Number.parseInt(eventData.bookingCount, 10) || 0;
+					transaction.update(eventRef, {
+						bookingCount: Math.max(0, currentCount - 1),
+						updatedAt: now
+					});
 				}
 
-				const bookingOwnerId = String(booking.userId || "").trim();
-				if (bookingOwnerId) {
-					const userRef = db.collection("users").doc(bookingOwnerId);
-					const userDoc = await transaction.get(userRef);
-					if (userDoc.exists) {
-						transaction.update(userRef, {
-							bookings: admin.firestore.FieldValue.arrayRemove(bookingId),
-							updatedAt: now
-						});
-					}
+				if (userRef && userDoc && userDoc.exists) {
+					transaction.update(userRef, {
+						bookings: admin.firestore.FieldValue.arrayRemove(bookingId),
+						updatedAt: now
+					});
 				}
 
 				transaction.delete(bookingRef);

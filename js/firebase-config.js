@@ -3,24 +3,38 @@
 // Optional runtime EmailJS config via window.__EMAILJS_CONFIG__ = { serviceId, templateId, publicKey }
 
 const defaultFirebaseConfig = {
-  apiKey: "AIzaSyC_WVALyKeeNiuftVaJWtiUd_7l6C0SfTY",
-  authDomain: "choir-booking.firebaseapp.com",
-  projectId: "choir-booking",
-  storageBucket: "choir-booking.firebasestorage.app",
-  messagingSenderId: "1079032727043",
-  appId: "1:1079032727043:web:383c9ee87bba7111ac3036",
+  apiKey: "YOUR_API_KEY_HERE",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID",
 };
 
-const runtimeFirebaseConfig = window.__FIREBASE_CONFIG__ || {};
-const firebaseConfig = { ...defaultFirebaseConfig, ...runtimeFirebaseConfig };
+const publicRuntimeFirebaseConfig = window.__FIREBASE_CONFIG_PUBLIC__ || {};
+const localRuntimeFirebaseConfig = window.__FIREBASE_CONFIG__ || {};
+const firebaseConfig = {
+  ...defaultFirebaseConfig,
+  ...publicRuntimeFirebaseConfig,
+  ...localRuntimeFirebaseConfig,
+};
 
-const hasPlaceholderConfig =
-  firebaseConfig.projectId === defaultFirebaseConfig.projectId ||
-  firebaseConfig.apiKey === defaultFirebaseConfig.apiKey ||
-  firebaseConfig.appId === defaultFirebaseConfig.appId;
+const requiredConfigKeys = [
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "storageBucket",
+  "messagingSenderId",
+  "appId",
+];
+
+const hasPlaceholderConfig = requiredConfigKeys.some((key) => {
+  const value = String(firebaseConfig[key] || "");
+  return !value || value.startsWith("YOUR_");
+});
 
 if (hasPlaceholderConfig) {
-  console.warn("Firebase config placeholders detected. Update js/firebase-config.js or provide window.__FIREBASE_CONFIG__.");
+  throw new Error("Firebase config missing. Set js/runtime-config.public.js or provide window.__FIREBASE_CONFIG__ in js/runtime-config.local.js.");
 }
 
 if (!firebase.apps.length) {

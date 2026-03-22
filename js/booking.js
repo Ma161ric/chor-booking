@@ -361,7 +361,12 @@ class BookingManager {
         }
 
         const eventRef = db.collection("events").doc(booking.eventId);
-        const eventDoc = await transaction.get(eventRef);
+        const userRef = db.collection("users").doc(booking.userId);
+        const [eventDoc, bookingOwnerDoc] = await Promise.all([
+          transaction.get(eventRef),
+          transaction.get(userRef)
+        ]);
+
         if (eventDoc.exists) {
           const eventData = eventDoc.data();
           const bookingCount = Number.parseInt(eventData.bookingCount, 10) || 0;
@@ -371,8 +376,6 @@ class BookingManager {
           });
         }
 
-        const userRef = db.collection("users").doc(booking.userId);
-        const bookingOwnerDoc = await transaction.get(userRef);
         if (bookingOwnerDoc.exists) {
           transaction.update(userRef, {
             bookings: firebase.firestore.FieldValue.arrayRemove(bookingId),
