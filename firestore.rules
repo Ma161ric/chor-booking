@@ -6,11 +6,29 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function canUserCancelBooking() {
+      return isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && (
+          (resource.data.cancellationDeadline is timestamp && request.time < resource.data.cancellationDeadline)
+          || (
+            !(resource.data.cancellationDeadline is timestamp)
+            && resource.data.createdAt is timestamp
+            && request.time < resource.data.createdAt + duration.value(24, 'h')
+          )
+        );
+    }
+
+    match /admins/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
     }
 
     match /users/{userId} {
@@ -38,15 +56,28 @@ service cloud.firestore {
         && request.resource.data.capacity > 0
         && request.resource.data.bookingCount is int
         && request.resource.data.bookingCount == 0;
-      allow update: if isAdmin()
-        && request.resource.data.title is string
-        && request.resource.data.description is string
-        && request.resource.data.time is string
-        && request.resource.data.date is timestamp
-        && request.resource.data.capacity is int
-        && request.resource.data.capacity >= resource.data.bookingCount
-        && request.resource.data.bookingCount is int
-        && request.resource.data.bookingCount >= 0;
+      allow update: if (
+          isAdmin()
+          && request.resource.data.title is string
+          && request.resource.data.description is string
+          && request.resource.data.time is string
+          && request.resource.data.date is timestamp
+          && request.resource.data.capacity is int
+          && request.resource.data.capacity >= resource.data.bookingCount
+          && request.resource.data.bookingCount is int
+          && request.resource.data.bookingCount >= 0
+        )
+        || (
+          isSignedIn()
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(["bookingCount", "updatedAt"])
+          && request.resource.data.bookingCount is int
+          && request.resource.data.bookingCount >= 0
+          && request.resource.data.bookingCount <= resource.data.capacity
+          && (
+            request.resource.data.bookingCount == resource.data.bookingCount + 1
+            || request.resource.data.bookingCount == resource.data.bookingCount - 1
+          )
+        );
       allow delete: if isAdmin();
     }
 
@@ -62,11 +93,13 @@ service cloud.firestore {
         && request.resource.data.status == "confirmed"
         && request.resource.data.checkedIn == false
         && request.resource.data.checkedInAt == null
-        && request.resource.data.emailStatus == "pending"
+        && request.resource.data.emailStatus is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.cancellationDeadline is timestamp
+        && request.resource.data.cancellationDeadline > request.resource.data.createdAt
         && exists(/databases/$(database)/documents/events/$(request.resource.data.eventId));
-
       allow update: if isAdmin();
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || canUserCancelBooking();
     }
 
     match /appConfig/public {

@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "lint:functions": "npm --prefix functions run lint",
-    "deploy:firebase": "firebase deploy --only firestore:rules,firestore:indexes,functions",
-    "serve:emulators": "firebase emulators:start --only firestore,functions"
+    "deploy:firebase": "firebase deploy --only firestore:rules,firestore:indexes,hosting",
+    "serve:emulators": "firebase emulators:start --only firestore"
+  },
+  "dependencies": {
+    "firebase": "^12.11.0"
   }
 }

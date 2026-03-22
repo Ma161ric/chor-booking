@@ -65,6 +65,8 @@ class BookingManager {
         const safeName = (userData.name || user.displayName || user.email || "Gast").trim();
         const ticketNumber = this.generateTicketNumber();
         const qrCodeUrl = this.generateQRCode(ticketNumber);
+        const createdAt = new Date();
+        const cancellationDeadline = new Date(createdAt.getTime() + (24 * 60 * 60 * 1000));
 
         const booking = {
           eventId,
@@ -74,10 +76,11 @@ class BookingManager {
           ticketNumber,
           qrCodeUrl,
           status: "confirmed",
-          createdAt: new Date(),
+          createdAt,
           checkedIn: false,
           checkedInAt: null,
-          emailStatus: "pending"
+          emailStatus: "pending",
+          cancellationDeadline
         };
 
         transaction.set(bookingRef, booking);
@@ -111,6 +114,10 @@ class BookingManager {
           eventTime: eventData.time || "",
           eventLocation: eventData.location || ""
         };
+      });
+
+      this.sendBookingConfirmationEmail(newBooking).catch((mailError) => {
+        console.error("Client-side booking mail failed:", mailError);
       });
 
       authManager.showAlert("Ticket erfolgreich gebucht!", "success");
@@ -148,6 +155,102 @@ class BookingManager {
       console.error("Error getting public config:", error);
       return null;
     }
+  }
+
+  getEmailJsConfig(publicConfig = null) {
+    const runtimeConfig = window.__EMAILJS_CONFIG__ || {};
+    const config = publicConfig || this.publicConfigCache || {};
+
+    return {
+      serviceId: runtimeConfig.serviceId || config.emailjsServiceId || "",
+      templateId: runtimeConfig.templateId || config.emailjsTemplateId || "",
+      publicKey: runtimeConfig.publicKey || config.emailjsPublicKey || ""
+    };
+  }
+
+  async sendEmailWithEmailJs(templateParams) {
+    const publicConfig = await this.getPublicConfig();
+    const emailJs = this.getEmailJsConfig(publicConfig);
+
+    if (!emailJs.serviceId || !emailJs.templateId || !emailJs.publicKey) {
+      return {
+        sent: false,
+        code: "EMAIL_NOT_CONFIGURED"
+      };
+    }
+
+    const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        service_id: emailJs.serviceId,
+        template_id: emailJs.templateId,
+        user_id: emailJs.publicKey,
+        template_params: templateParams
+      })
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`EMAILJS_REQUEST_FAILED:${response.status}:${details}`);
+    }
+
+    return {
+      sent: true,
+      code: "EMAIL_SENT"
+    };
+  }
+
+  async sendBookingConfirmationEmail(booking) {
+    if (!booking || !booking.id) {
+      return;
+    }
+
+    const eventDate = booking.eventDate?.toDate
+      ? booking.eventDate.toDate().toLocaleDateString("de-DE")
+      : booking.eventDate
+        ? new Date(booking.eventDate).toLocaleDateString("de-DE")
+        : "Wird noch bekanntgegeben";
+
+    try {
+      const result = await this.sendEmailWithEmailJs({
+        to_email: booking.userEmail || "",
+        to_name: booking.userName || "",
+        event_title: booking.eventTitle || "Event",
+        event_date: eventDate,
+        event_time: booking.eventTime || "",
+        event_location: booking.eventLocation || "",
+        ticket_number: booking.ticketNumber || booking.id,
+        qr_code_url: booking.qrCodeUrl || ""
+      });
+
+      if (result.code === "EMAIL_NOT_CONFIGURED") {
+        authManager.showAlert("Hinweis: EmailJS ist nicht konfiguriert. Ticket wurde trotzdem gebucht.", "warning");
+        return;
+      }
+    } catch (error) {
+      authManager.showAlert("Ticket gebucht, aber Bestaetigungsmail konnte nicht versendet werden.", "warning");
+    }
+  }
+
+  async sendTestEmail(toEmail) {
+    const email = String(toEmail || "").trim();
+    if (!email) {
+      throw new Error("TEST_EMAIL_REQUIRED");
+    }
+
+    return this.sendEmailWithEmailJs({
+      to_email: email,
+      to_name: "Test",
+      event_title: "Testmail Chor Booking",
+      event_date: new Date().toLocaleDateString("de-DE"),
+      event_time: "",
+      event_location: "",
+      ticket_number: "TEST-0000",
+      qr_code_url: ""
+    });
   }
 
   // Get User Bookings
@@ -249,6 +352,14 @@ class BookingManager {
           throw new Error("BOOKING_FORBIDDEN");
         }
 
+        if (!isAdmin) {
+          const deadlineSource = booking.cancellationDeadline || booking.createdAt;
+          const deadlineDate = deadlineSource?.toDate ? deadlineSource.toDate() : new Date(deadlineSource);
+          if (Number.isFinite(deadlineDate.getTime()) && Date.now() > deadlineDate.getTime()) {
+            throw new Error("CANCELLATION_WINDOW_EXPIRED");
+          }
+        }
+
         const eventRef = db.collection("events").doc(booking.eventId);
         const eventDoc = await transaction.get(eventRef);
         if (eventDoc.exists) {
@@ -276,10 +387,14 @@ class BookingManager {
       return true;
     } catch (error) {
       console.error("Error canceling booking:", error);
-      if (error.message === "BOOKING_NOT_FOUND") {
+
+      const code = error.message || error.code;
+      if (code === "BOOKING_NOT_FOUND") {
         authManager.showAlert("Buchung existiert nicht mehr.", "warning");
-      } else if (error.message === "BOOKING_FORBIDDEN") {
+      } else if (code === "BOOKING_FORBIDDEN") {
         authManager.showAlert("Du darfst nur eigene Buchungen stornieren.", "error");
+      } else if (code === "CANCELLATION_WINDOW_EXPIRED") {
+        authManager.showAlert("Storno ist nur innerhalb von 24 Stunden nach Buchung möglich.", "error");
       } else {
         authManager.showAlert("Fehler beim Stornieren der Buchung.", "error");
       }
@@ -413,7 +528,7 @@ class BookingManager {
     modalContent.innerHTML = `
       <div style="text-align: center;">
         <h2>✓ Ticket erfolgreich gebucht!</h2>
-        <p>Deine Bestätigungsemail wird in Kürze versendet.</p>
+        <p>Falls EmailJS konfiguriert ist, wird eine Bestaetigungsmail versendet.</p>
         <p><strong>${this.escapeHtml(booking.eventTitle || "Event")}</strong></p>
         <p>${this.escapeHtml(eventDate)} ${this.escapeHtml(booking.eventTime || "")}</p>
         <div class="qr-container">

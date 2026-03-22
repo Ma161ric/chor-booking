@@ -8,6 +8,9 @@ if (!admin.apps.length) {
 
 const logger = functions.logger;
 const REGION = "europe-west1";
+const BOOKING_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+const MAX_BOOKING_ATTEMPTS_PER_WINDOW = 6;
+const CANCELLATION_WINDOW_HOURS = 24;
 
 function readSecret(name, fallback = "") {
 	const value = process.env[name];
@@ -53,6 +56,56 @@ function parseAdminAllowList() {
 			.map((entry) => entry.trim().toLowerCase())
 			.filter(Boolean)
 	);
+}
+
+function toMillis(value) {
+	if (!value) {
+		return null;
+	}
+
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value;
+	}
+
+	if (typeof value === "string") {
+		const parsed = Date.parse(value);
+		return Number.isNaN(parsed) ? null : parsed;
+	}
+
+	if (typeof value.toMillis === "function") {
+		const millis = value.toMillis();
+		return Number.isFinite(millis) ? millis : null;
+	}
+
+	if (value instanceof Date) {
+		const millis = value.getTime();
+		return Number.isFinite(millis) ? millis : null;
+	}
+
+	return null;
+}
+
+function normalizeName(rawName, fallbackEmail) {
+	const value = String(rawName || fallbackEmail || "Gast").trim();
+	if (!value) {
+		return "Gast";
+	}
+
+	return value.slice(0, 120);
+}
+
+function generateTicketNumber() {
+	const timestamp = Date.now().toString(36).toUpperCase();
+	const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+	return `${timestamp}-${random}`;
+}
+
+function generateQrCodeUrl(ticketNumber) {
+	return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(ticketNumber)}`;
+}
+
+function createHttpsError(code, message) {
+	return new functions.https.HttpsError(code, message);
 }
 
 function isAllowedAdminEmail(email) {
@@ -155,6 +208,236 @@ exports.bootstrapAdminRole = functions
 			updated: result.updated,
 			admin: result.admin
 		};
+	});
+
+exports.createBooking = functions
+	.region(REGION)
+	.https.onCall(async (data, context) => {
+		if (!context.auth || !context.auth.uid || !context.auth.token.email) {
+			throw createHttpsError("unauthenticated", "AUTH_REQUIRED");
+		}
+
+		const eventId = String(data?.eventId || "").trim();
+		if (!eventId) {
+			throw createHttpsError("invalid-argument", "EVENT_ID_REQUIRED");
+		}
+
+		const uid = context.auth.uid;
+		const userEmail = String(context.auth.token.email || "").trim();
+		const userName = normalizeName(data?.userName, userEmail);
+		const now = admin.firestore.Timestamp.now();
+		const nowMs = Date.now();
+
+		const db = admin.firestore();
+		const eventRef = db.collection("events").doc(eventId);
+		const bookingRef = db.collection("bookings").doc();
+		const userRef = db.collection("users").doc(uid);
+		const rateLimitRef = db.collection("bookingRateLimits").doc(uid);
+
+		try {
+			const attemptCount = await db.runTransaction(async (transaction) => {
+				const rateLimitDoc = await transaction.get(rateLimitRef);
+				const attemptsRaw = rateLimitDoc.exists && Array.isArray(rateLimitDoc.data()?.attempts)
+					? rateLimitDoc.data().attempts
+					: [];
+				const attemptsRecent = attemptsRaw
+					.map((entry) => toMillis(entry))
+					.filter((millis) => millis !== null && nowMs - millis <= BOOKING_ATTEMPT_WINDOW_MS);
+
+				attemptsRecent.push(nowMs);
+				transaction.set(rateLimitRef, {
+					uid,
+					attempts: attemptsRecent,
+					updatedAt: now
+				}, { merge: true });
+
+				return attemptsRecent.length;
+			});
+
+			if (attemptCount > MAX_BOOKING_ATTEMPTS_PER_WINDOW) {
+				throw createHttpsError("resource-exhausted", "RATE_LIMIT_EXCEEDED");
+			}
+
+			const booking = await db.runTransaction(async (transaction) => {
+				const [eventDoc, userDoc] = await Promise.all([
+					transaction.get(eventRef),
+					transaction.get(userRef)
+				]);
+
+				if (!eventDoc.exists) {
+					throw createHttpsError("not-found", "EVENT_NOT_FOUND");
+				}
+
+				const eventData = eventDoc.data() || {};
+				const capacity = Number.parseInt(eventData.capacity, 10) || 0;
+				const bookingCount = Number.parseInt(eventData.bookingCount, 10) || 0;
+
+				if (capacity < 1) {
+					throw createHttpsError("failed-precondition", "EVENT_INVALID_CAPACITY");
+				}
+
+				if (bookingCount >= capacity) {
+					throw createHttpsError("failed-precondition", "EVENT_SOLD_OUT");
+				}
+
+				const ticketNumber = generateTicketNumber();
+				const cancellationDeadlineMs = nowMs + (CANCELLATION_WINDOW_HOURS * 60 * 60 * 1000);
+				const bookingPayload = {
+					eventId,
+					userId: uid,
+					userEmail,
+					userName,
+					ticketNumber,
+					qrCodeUrl: generateQrCodeUrl(ticketNumber),
+					status: "confirmed",
+					createdAt: now,
+					checkedIn: false,
+					checkedInAt: null,
+					emailStatus: "pending",
+					cancellationDeadline: admin.firestore.Timestamp.fromMillis(cancellationDeadlineMs)
+				};
+
+				transaction.set(bookingRef, bookingPayload);
+				transaction.update(eventRef, {
+					bookingCount: bookingCount + 1,
+					updatedAt: now
+				});
+
+				if (userDoc.exists) {
+					transaction.update(userRef, {
+						bookings: admin.firestore.FieldValue.arrayUnion(bookingRef.id),
+						updatedAt: now
+					});
+				} else {
+					transaction.set(userRef, {
+						uid,
+						email: userEmail,
+						name: userName,
+						role: "user",
+						createdAt: now,
+						updatedAt: now,
+						bookings: [bookingRef.id]
+					}, { merge: true });
+				}
+
+				return {
+					id: bookingRef.id,
+					...bookingPayload,
+					eventTitle: eventData.title || "Event",
+					eventDate: eventData.date || null,
+					eventTime: eventData.time || "",
+					eventLocation: eventData.location || ""
+				};
+			});
+
+			return {
+				success: true,
+				booking
+			};
+		} catch (error) {
+			if (error instanceof functions.https.HttpsError) {
+				throw error;
+			}
+
+			logger.error("createBooking failed", {
+				uid,
+				eventId,
+				message: error.message
+			});
+
+			throw createHttpsError("internal", "BOOKING_CREATE_FAILED");
+		}
+	});
+
+exports.cancelBooking = functions
+	.region(REGION)
+	.https.onCall(async (data, context) => {
+		if (!context.auth || !context.auth.uid) {
+			throw createHttpsError("unauthenticated", "AUTH_REQUIRED");
+		}
+
+		const bookingId = String(data?.bookingId || "").trim();
+		if (!bookingId) {
+			throw createHttpsError("invalid-argument", "BOOKING_ID_REQUIRED");
+		}
+
+		const uid = context.auth.uid;
+		const isAdmin = context.auth.token.admin === true;
+		const nowMs = Date.now();
+		const now = admin.firestore.Timestamp.now();
+
+		const db = admin.firestore();
+		const bookingRef = db.collection("bookings").doc(bookingId);
+
+		try {
+			await db.runTransaction(async (transaction) => {
+				const bookingDoc = await transaction.get(bookingRef);
+				if (!bookingDoc.exists) {
+					throw createHttpsError("not-found", "BOOKING_NOT_FOUND");
+				}
+
+				const booking = bookingDoc.data() || {};
+				if (!isAdmin && booking.userId !== uid) {
+					throw createHttpsError("permission-denied", "BOOKING_FORBIDDEN");
+				}
+
+				if (!isAdmin) {
+					const deadlineSource = booking.cancellationDeadline || booking.createdAt;
+					const deadlineMsRaw = toMillis(deadlineSource);
+					const deadlineMs = deadlineMsRaw === null
+						? null
+						: deadlineSource === booking.createdAt
+							? deadlineMsRaw + (CANCELLATION_WINDOW_HOURS * 60 * 60 * 1000)
+							: deadlineMsRaw;
+
+					if (deadlineMs !== null && nowMs > deadlineMs) {
+						throw createHttpsError("failed-precondition", "CANCELLATION_WINDOW_EXPIRED");
+					}
+				}
+
+				const eventId = String(booking.eventId || "").trim();
+				if (eventId) {
+					const eventRef = db.collection("events").doc(eventId);
+					const eventDoc = await transaction.get(eventRef);
+					if (eventDoc.exists) {
+						const eventData = eventDoc.data() || {};
+						const currentCount = Number.parseInt(eventData.bookingCount, 10) || 0;
+						transaction.update(eventRef, {
+							bookingCount: Math.max(0, currentCount - 1),
+							updatedAt: now
+						});
+					}
+				}
+
+				const bookingOwnerId = String(booking.userId || "").trim();
+				if (bookingOwnerId) {
+					const userRef = db.collection("users").doc(bookingOwnerId);
+					const userDoc = await transaction.get(userRef);
+					if (userDoc.exists) {
+						transaction.update(userRef, {
+							bookings: admin.firestore.FieldValue.arrayRemove(bookingId),
+							updatedAt: now
+						});
+					}
+				}
+
+				transaction.delete(bookingRef);
+			});
+
+			return { success: true };
+		} catch (error) {
+			if (error instanceof functions.https.HttpsError) {
+				throw error;
+			}
+
+			logger.error("cancelBooking failed", {
+				uid,
+				bookingId,
+				message: error.message
+			});
+
+			throw createHttpsError("internal", "BOOKING_CANCEL_FAILED");
+		}
 	});
 
 exports.sendBookingEmail = functions

@@ -324,6 +324,9 @@ class AdminPanel {
     const publicConfig = await bookingManager.getPublicConfig();
     const supportEmail = this.escapeHtml(publicConfig?.supportEmail || authManager.currentUser?.email || "");
     const mailFromName = this.escapeHtml(publicConfig?.mailFromName || "Chor Konzert Team");
+    const emailjsServiceId = this.escapeHtml(publicConfig?.emailjsServiceId || "");
+    const emailjsTemplateId = this.escapeHtml(publicConfig?.emailjsTemplateId || "");
+    const emailjsPublicKey = this.escapeHtml(publicConfig?.emailjsPublicKey || "");
     const defaultTestEmail = this.escapeHtml(authManager.currentUser?.email || "");
 
     container.innerHTML = `
@@ -347,6 +350,24 @@ class AdminPanel {
           <button class="btn btn-primary" onclick="adminPanel.saveSettings()">Einstellungen speichern</button>
         </div>
 
+        <h3>EmailJS (Clientseitige Mail)</h3>
+        <p style="color: #6b7280; margin-bottom: 1rem;">Lege Service ID, Template ID und Public Key aus EmailJS hier ab. Das sind oeffentliche Werte und duerfen clientseitig verwendet werden.</p>
+
+        <div class="form-group">
+          <label>EmailJS Service ID *</label>
+          <input type="text" id="emailjs-service-id" value="${emailjsServiceId}" placeholder="service_xxxxxxx" />
+        </div>
+
+        <div class="form-group">
+          <label>EmailJS Template ID *</label>
+          <input type="text" id="emailjs-template-id" value="${emailjsTemplateId}" placeholder="template_xxxxxxx" />
+        </div>
+
+        <div class="form-group">
+          <label>EmailJS Public Key *</label>
+          <input type="text" id="emailjs-public-key" value="${emailjsPublicKey}" placeholder="xxxxxxxxxxxxxxx" />
+        </div>
+
         <hr style="margin: 2rem 0; border: none; border-top: 1px solid #e5e7eb;">
 
         <h3>Mail-System testen</h3>
@@ -358,7 +379,7 @@ class AdminPanel {
 
         <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
           <p style="margin: 0; color: #7f1d1d; font-size: 0.9rem;">
-            <strong>⚠️ Hinweis:</strong> SMTP-Zugangsdaten und Admin-Allowlist werden ausschließlich über Firebase Functions Secrets gesetzt, nicht im Firestore.
+            <strong>Hinweis:</strong> Diese Variante versendet Mails direkt aus dem Browser ueber EmailJS. Das ist einfach, aber weniger sicher als serverseitige Functions.
           </p>
         </div>
       </div>
@@ -373,6 +394,9 @@ class AdminPanel {
 
     const supportEmail = document.getElementById("support-email").value.trim();
     const mailFromName = document.getElementById("mail-from-name").value.trim();
+    const emailjsServiceId = document.getElementById("emailjs-service-id").value.trim();
+    const emailjsTemplateId = document.getElementById("emailjs-template-id").value.trim();
+    const emailjsPublicKey = document.getElementById("emailjs-public-key").value.trim();
 
     if (!supportEmail || !mailFromName) {
       authManager.showAlert("Bitte alle Pflichtfelder ausfüllen.", "error");
@@ -383,6 +407,9 @@ class AdminPanel {
       await db.collection("appConfig").doc("public").set({
         supportEmail,
         mailFromName,
+        emailjsServiceId,
+        emailjsTemplateId,
+        emailjsPublicKey,
         updatedAt: new Date(),
         updatedBy: authManager.currentUser?.uid || null
       }, { merge: true });
@@ -401,11 +428,6 @@ class AdminPanel {
       return;
     }
 
-    if (!firebaseFunctions) {
-      authManager.showAlert("Cloud Functions sind nicht initialisiert.", "error");
-      return;
-    }
-
     const testInput = document.getElementById("test-email");
     const testEmail = (testInput?.value || authManager.currentUser?.email || "").trim();
 
@@ -415,8 +437,11 @@ class AdminPanel {
     }
 
     try {
-      const callable = firebaseFunctions.httpsCallable("sendTestEmail");
-      await callable({ testEmail });
+      const result = await bookingManager.sendTestEmail(testEmail);
+      if (!result?.sent) {
+        authManager.showAlert("EmailJS ist noch nicht konfiguriert. Bitte Service/Template/Public Key speichern.", "warning");
+        return;
+      }
       authManager.showAlert("Testmail wurde versendet.", "success");
     } catch (error) {
       console.error("Error sending test email:", error);

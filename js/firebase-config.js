@@ -1,22 +1,23 @@
 // Firebase Configuration
 // Runtime override supported via window.__FIREBASE_CONFIG__
+// Optional runtime EmailJS config via window.__EMAILJS_CONFIG__ = { serviceId, templateId, publicKey }
 
 const defaultFirebaseConfig = {
-  apiKey: "YOUR_API_KEY_HERE",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
+  apiKey: "AIzaSyC_WVALyKeeNiuftVaJWtiUd_7l6C0SfTY",
+  authDomain: "choir-booking.firebaseapp.com",
+  projectId: "choir-booking",
+  storageBucket: "choir-booking.firebasestorage.app",
+  messagingSenderId: "1079032727043",
+  appId: "1:1079032727043:web:383c9ee87bba7111ac3036",
 };
 
 const runtimeFirebaseConfig = window.__FIREBASE_CONFIG__ || {};
 const firebaseConfig = { ...defaultFirebaseConfig, ...runtimeFirebaseConfig };
 
 const hasPlaceholderConfig =
-  firebaseConfig.projectId === "YOUR_PROJECT_ID" ||
-  firebaseConfig.apiKey === "YOUR_API_KEY_HERE";
+  firebaseConfig.projectId === defaultFirebaseConfig.projectId ||
+  firebaseConfig.apiKey === defaultFirebaseConfig.apiKey ||
+  firebaseConfig.appId === defaultFirebaseConfig.appId;
 
 if (hasPlaceholderConfig) {
   console.warn("Firebase config placeholders detected. Update js/firebase-config.js or provide window.__FIREBASE_CONFIG__.");
@@ -31,11 +32,5 @@ const db = firebase.firestore();
 
 // Initialize Auth
 const auth = firebase.auth();
-
-// Initialize Cloud Functions (for admin bootstrap + operational tools)
-const functionsRegion = window.__FIREBASE_FUNCTIONS_REGION__ || "europe-west1";
-const firebaseFunctions = firebase.functions
-  ? firebase.app().functions(functionsRegion)
-  : null;
 
 console.log("Firebase initialized successfully.");

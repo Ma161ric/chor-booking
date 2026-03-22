@@ -21,16 +21,17 @@ class AuthManager {
     });
   }
 
-  // Check if User is Admin by Custom Claim
+  // Check if user is admin via Firestore admins/{uid}
   async checkAdminStatus(forceRefresh = false) {
+    void forceRefresh;
     if (!this.currentUser) {
       this.isAdmin = false;
       return false;
     }
 
     try {
-      const tokenResult = await this.currentUser.getIdTokenResult(forceRefresh);
-      this.isAdmin = !!tokenResult.claims.admin;
+      const adminDoc = await db.collection("admins").doc(this.currentUser.uid).get();
+      this.isAdmin = adminDoc.exists;
       return this.isAdmin;
     } catch (error) {
       console.error("Error checking admin status:", error);
@@ -89,38 +90,16 @@ class AuthManager {
     }
   }
 
-  async bootstrapAdminRole() {
-    if (!firebaseFunctions) {
-      return false;
-    }
-
-    try {
-      const callable = firebaseFunctions.httpsCallable("bootstrapAdminRole");
-      const result = await callable({});
-      return !!result?.data?.success;
-    } catch (error) {
-      console.warn("Admin bootstrap failed:", error);
-      return false;
-    }
-  }
-
-  // Admin Login (claim based)
+  // Admin Login (admins/{uid} allowlist)
   async adminLogin(email, password) {
     try {
       await this.login(email, password, false);
 
-      let isAdmin = await this.checkAdminStatus(true);
-      if (!isAdmin) {
-        const bootstrapped = await this.bootstrapAdminRole();
-        if (bootstrapped && this.currentUser) {
-          await this.currentUser.getIdToken(true);
-          isAdmin = await this.checkAdminStatus(true);
-        }
-      }
+      const isAdmin = await this.checkAdminStatus(true);
 
       if (!isAdmin) {
         await auth.signOut();
-        throw new Error("Kein Admin-Zugriff. Diese Email ist nicht als Admin freigeschaltet.");
+        throw new Error("Kein Admin-Zugriff. Bitte admins/{uid} in Firestore freischalten.");
       }
 
       this.showAlert("Admin erfolgreich angemeldet!", "success");
