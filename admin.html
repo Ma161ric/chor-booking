@@ -4,29 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin-Dashboard - Chor-Konzert Ticketbuchung</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- Header -->
-  <header>
-    <div>
-      <h1>🎵 Admin-Dashboard</h1>
-    </div>
-    <div class="nav-buttons">
-      <button class="btn btn-outline" onclick="window.location.href='index.html'">Zurück zur Website</button>
-      <button class="btn btn-outline" onclick="adminPage.logout()">Abmelden</button>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="brand-block">
+        <p class="brand-eyebrow">Administration</p>
+        <h1>Admin-Dashboard</h1>
+      </div>
+      <div class="nav-buttons">
+        <button class="btn btn-ghost" onclick="window.location.href='index.html'">Zurück zur Website</button>
+        <button class="btn btn-danger-soft" onclick="adminPage.logout()">Abmelden</button>
+      </div>
     </div>
   </header>
 
-  <!-- Alert Container -->
-  <div id="alert-container" style="position: fixed; top: 80px; right: 20px; max-width: 400px; z-index: 100;"></div>
+  <div id="alert-container" class="alert-stack"></div>
 
-  <!-- Main Container -->
-  <div class="container">
+  <main class="container app-shell">
 
-    <!-- Admin Login (Before Login) -->
-    <div id="admin-login" class="card" style="max-width: 400px; margin: 3rem auto;">
-      <h2 style="text-align: center; margin-bottom: 2rem;">Admin-Login</h2>
+    <div id="admin-login" class="card auth-card">
+      <h2>Admin-Login</h2>
 
       <div class="form-group">
         <label>Admin-Email *</label>
@@ -40,8 +42,8 @@
 
       <button class="btn btn-primary btn-block" onclick="adminPage.handleAdminLogin()">Anmelden</button>
 
-      <div style="background: #eff6ff; border-left: 4px solid #6366f1; padding: 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.9rem;">
-        <p style="margin: 0; color: #0c2d6b;">
+      <div class="alert alert-info admin-note">
+        <p>
           Admin-Zugriff wird ueber die Firestore-Collection admins/{uid} geprueft.
           <br>Lege deinen UID-Eintrag einmalig in Firestore an, dann ist dieser Account Admin.
         </p>
@@ -61,12 +63,12 @@
       <!-- Events Tab -->
       <div id="events-tab" class="tab-content active">
         <div class="card">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <div class="section-head">
             <h2>Events verwalten</h2>
             <button class="btn btn-success" onclick="adminPanel.openCreateEventModal()">+ Neues Event</button>
           </div>
           <div id="events-list">
-            <div style="text-align: center; padding: 2rem;">
+            <div class="loading-state">
               <div class="spinner"></div>
               <p>Lade Events...</p>
             </div>
@@ -79,7 +81,7 @@
         <div class="card">
           <h2>Buchungen verwalten</h2>
           <div id="bookings-list">
-            <div style="text-align: center; padding: 2rem;">
+            <div class="loading-state">
               <div class="spinner"></div>
               <p>Lade Buchungen...</p>
             </div>
@@ -94,7 +96,7 @@
 
     </div>
 
-  </div>
+  </main>
 
   <!-- Event Modal -->
   <div id="event-modal" class="modal">

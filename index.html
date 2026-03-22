@@ -4,197 +4,205 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chor-Konzert Ticketbuchung</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- Header -->
-  <header>
-    <div style="display: flex; gap: 1rem; align-items: center;">
-      <h1>🎵 Chor-Konzert Ticketbuchung</h1>
-    </div>
-    <div class="nav-buttons">
-      <button class="btn btn-outline" id="admin-btn" style="display: none;" onclick="window.location.href='admin.html'">
-        Admin-Bereich
-      </button>
-      <button class="btn btn-outline" id="logout-btn" style="display: none;" onclick="authManager.logout()">
-        Abmelden
-      </button>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="brand-block">
+        <p class="brand-eyebrow">Concert Booking Platform</p>
+        <h1>Chor-Konzert Ticketbuchung</h1>
+      </div>
+      <div class="nav-buttons">
+        <button class="btn btn-ghost" id="admin-btn" style="display: none;" onclick="window.location.href='admin.html'">
+          Admin-Bereich
+        </button>
+        <button class="btn btn-danger-soft" id="logout-btn" style="display: none;" onclick="authManager.logout()">
+          Abmelden
+        </button>
+      </div>
     </div>
   </header>
 
-  <!-- Alert Container -->
-  <div id="alert-container" style="position: fixed; top: 80px; right: 20px; max-width: 400px; z-index: 100;"></div>
+  <div id="alert-container" class="alert-stack"></div>
 
-  <!-- Main Container -->
-  <div class="container">
-
-    <!-- Auth Section (Before Login) -->
-    <div id="auth-container" class="card" style="max-width: 500px; margin: 2rem auto;">
-      <h2 style="text-align: center; margin-bottom: 2rem;">Willkommen! 👋</h2>
-
-      <!-- Auth Tabs -->
-      <div class="auth-tabs">
-        <div class="auth-tab">
-          <input type="radio" id="tab-login" name="auth-tab" checked>
-          <label for="tab-login">Anmelden</label>
+  <main class="container app-shell">
+    <div class="auth-layout" id="auth-container">
+      <section class="card auth-card" aria-labelledby="auth-title">
+        <div class="auth-heading">
+          <p class="section-kicker">Willkommen</p>
+          <h2 id="auth-title">Melde dich an und sichere deine Plätze</h2>
+          <p>Verwalte deine Konzerttickets, buche neue Events und behalte den Überblick.</p>
         </div>
-        <div class="auth-tab">
-          <input type="radio" id="tab-register" name="auth-tab">
-          <label for="tab-register">Registrieren</label>
+
+        <div class="auth-tabs" role="tablist" aria-label="Anmeldung und Registrierung">
+          <div class="auth-tab">
+            <input type="radio" id="tab-login" name="auth-tab" checked>
+            <label for="tab-login">Anmelden</label>
+          </div>
+          <div class="auth-tab">
+            <input type="radio" id="tab-register" name="auth-tab">
+            <label for="tab-register">Registrieren</label>
+          </div>
         </div>
-      </div>
 
-      <!-- Login Form -->
-      <div id="login-form" class="form-section">
-        <div class="form-group">
-          <label>E-Mail *</label>
-          <input type="email" id="login-email" placeholder="deine@email.com" required>
+        <div id="login-form" class="form-section">
+          <div class="form-group">
+            <label for="login-email">E-Mail *</label>
+            <input type="email" id="login-email" placeholder="deine@email.com" required>
+            <small>Nutze die E-Mail, mit der du registriert bist.</small>
+          </div>
+          <div class="form-group">
+            <label for="login-password">Passwort *</label>
+            <input type="password" id="login-password" placeholder="••••••••" required>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="handleLogin()">Anmelden</button>
         </div>
-        <div class="form-group">
-          <label>Passwort *</label>
-          <input type="password" id="login-password" placeholder="••••••••" required>
+
+        <div id="register-form" class="form-section" style="display: none;">
+          <div class="form-group">
+            <label for="register-name">Name *</label>
+            <input type="text" id="register-name" placeholder="Max Mustermann" required>
+          </div>
+          <div class="form-group">
+            <label for="register-email">E-Mail *</label>
+            <input type="email" id="register-email" placeholder="deine@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="register-password">Passwort *</label>
+            <input type="password" id="register-password" placeholder="Mindestens 6 Zeichen" required>
+          </div>
+          <div class="form-group">
+            <label for="register-password-confirm">Passwort wiederholen *</label>
+            <input type="password" id="register-password-confirm" placeholder="Passwort wiederholen" required>
+            <small>Mindestens 6 Zeichen, inkl. Groß- und Kleinbuchstaben empfohlen.</small>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="handleRegister()">Registrieren</button>
         </div>
-        <button class="btn btn-primary btn-block" onclick="handleLogin()">Anmelden</button>
-      </div>
-
-      <!-- Register Form -->
-      <div id="register-form" class="form-section" style="display: none;">
-        <div class="form-group">
-          <label>Name *</label>
-          <input type="text" id="register-name" placeholder="Max Mustermann" required>
-        </div>
-        <div class="form-group">
-          <label>E-Mail *</label>
-          <input type="email" id="register-email" placeholder="deine@email.com" required>
-        </div>
-        <div class="form-group">
-          <label>Passwort *</label>
-          <input type="password" id="register-password" placeholder="Mindestens 6 Zeichen" required>
-        </div>
-        <div class="form-group">
-          <label>Passwort wiederholen *</label>
-          <input type="password" id="register-password-confirm" placeholder="Passwort wiederholen" required>
-        </div>
-        <button class="btn btn-primary btn-block" onclick="handleRegister()">Registrieren</button>
-      </div>
-
-      <script>
-        // Tab Switching
-        document.getElementById("tab-login").addEventListener("change", () => {
-          document.getElementById("login-form").style.display = "block";
-          document.getElementById("register-form").style.display = "none";
-        });
-
-        document.getElementById("tab-register").addEventListener("change", () => {
-          document.getElementById("login-form").style.display = "none";
-          document.getElementById("register-form").style.display = "block";
-        });
-
-        // Handle Login
-        async function handleLogin() {
-          const email = document.getElementById("login-email").value;
-          const password = document.getElementById("login-password").value;
-          if (!email || !password) {
-            authManager.showAlert("Bitte fülle alle Felder aus.", "error");
-            return;
-          }
-
-          try {
-            await authManager.login(email, password);
-          } catch (error) {
-            console.error("Login failed:", error);
-          }
-        }
-
-        // Handle Register
-        async function handleRegister() {
-          const name = document.getElementById("register-name").value;
-          const email = document.getElementById("register-email").value;
-          const password = document.getElementById("register-password").value;
-          const passwordConfirm = document.getElementById("register-password-confirm").value;
-
-          if (!name || !email || !password || !passwordConfirm) {
-            authManager.showAlert("Bitte fülle alle Felder aus.", "error");
-            return;
-          }
-
-          if (password !== passwordConfirm) {
-            authManager.showAlert("Passwörter stimmen nicht überein.", "error");
-            return;
-          }
-
-          try {
-            await authManager.register(email, password, name);
-          } catch (error) {
-            console.error("Registration failed:", error);
-          }
-        }
-      </script>
+      </section>
     </div>
 
-    <!-- Main Page (After Login) -->
-    <div id="main-page" class="auth-page">
-      <!-- Welcome Section -->
-      <div class="card" style="text-align: center; background: linear-gradient(135deg, #6366f1, #ec4899); color: white;">
-        <h2 style="color: white; margin-bottom: 0;">Willkommen, <span id="user-name">Nutzer</span>! 🎶</h2>
-        <p>Buche deine Tickets für unsere kommenden Chor-Konzerte</p>
-      </div>
+    <section id="main-page" class="auth-page">
+      <section class="card hero-card" aria-labelledby="dashboard-title">
+        <div class="hero-content">
+          <p class="section-kicker">Dein Dashboard</p>
+          <h2 id="dashboard-title">Willkommen, <span id="user-name">Nutzer</span></h2>
+          <p>Buche deine Tickets für kommende Chor-Konzerte und verwalte alle Reservierungen an einem Ort.</p>
+        </div>
+      </section>
 
-      <!-- Events Section -->
-      <div class="card">
-        <h2>📅 Verfügbare Events</h2>
+      <section class="card section-card" aria-labelledby="events-heading">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Programm</p>
+            <h2 id="events-heading">Verfügbare Events</h2>
+          </div>
+        </div>
         <div id="events-container" class="events-grid">
-          <div style="text-align: center; padding: 2rem;">
-            <div class="spinner"></div>
+          <div class="loading-state">
+            <div class="spinner" aria-hidden="true"></div>
             <p>Lade Events...</p>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- My Bookings Section -->
-      <div class="card">
-        <h2>🎫 Meine Tickets</h2>
+      <section class="card section-card" aria-labelledby="tickets-heading">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Reservierungen</p>
+            <h2 id="tickets-heading">Meine Tickets</h2>
+          </div>
+        </div>
         <div id="bookings-container">
-          <div style="text-align: center; padding: 2rem;">
-            <div class="spinner"></div>
+          <div class="loading-state">
+            <div class="spinner" aria-hidden="true"></div>
             <p>Lade Tickets...</p>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </section>
 
-  </div>
+    <script>
+      // Tab Switching
+      document.getElementById("tab-login").addEventListener("change", () => {
+        document.getElementById("login-form").style.display = "block";
+        document.getElementById("register-form").style.display = "none";
+      });
 
-  <!-- Booking Modal -->
+      document.getElementById("tab-register").addEventListener("change", () => {
+        document.getElementById("login-form").style.display = "none";
+        document.getElementById("register-form").style.display = "block";
+      });
+
+      // Handle Login
+      async function handleLogin() {
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+        if (!email || !password) {
+          authManager.showAlert("Bitte fülle alle Felder aus.", "error");
+          return;
+        }
+
+        try {
+          await authManager.login(email, password);
+        } catch (error) {
+          console.error("Login failed:", error);
+        }
+      }
+
+      // Handle Register
+      async function handleRegister() {
+        const name = document.getElementById("register-name").value;
+        const email = document.getElementById("register-email").value;
+        const password = document.getElementById("register-password").value;
+        const passwordConfirm = document.getElementById("register-password-confirm").value;
+
+        if (!name || !email || !password || !passwordConfirm) {
+          authManager.showAlert("Bitte fülle alle Felder aus.", "error");
+          return;
+        }
+
+        if (password !== passwordConfirm) {
+          authManager.showAlert("Passwörter stimmen nicht überein.", "error");
+          return;
+        }
+
+        try {
+          await authManager.register(email, password, name);
+        } catch (error) {
+          console.error("Registration failed:", error);
+        }
+      }
+    </script>
+  </main>
+
   <div id="booking-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content booking-modal-content" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
       <div class="modal-header">
-        <h2>Ticket buchen</h2>
+        <h2 id="booking-modal-title">Ticket buchen</h2>
         <button class="close-btn" onclick="bookingManager.closeBookingModal()">✕</button>
       </div>
       <div id="booking-form-content"></div>
     </div>
   </div>
 
-  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
-  <!-- Our JavaScript Files -->
   <script src="js/runtime-config.public.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/events.js"></script>
   <script src="js/booking.js"></script>
 
-  <!-- Initialize on Page Load -->
   <script>
     window.addEventListener("load", async () => {
-      // Wait for auth state to be determined
       auth.onAuthStateChanged(async (user) => {
         if (user) {
-          // User is logged in - load content
           await eventsManager.displayEvents("events-container");
           await bookingManager.displayUserBookings("bookings-container");
           await authManager.checkAdminStatus();
@@ -203,10 +211,18 @@
           const eventsContainer = document.getElementById("events-container");
           const bookingsContainer = document.getElementById("bookings-container");
           if (eventsContainer) {
-            eventsContainer.innerHTML = "<p>Bitte melde dich an, um verfügbare Events zu sehen.</p>";
+            eventsContainer.innerHTML = `
+              <div class="empty-state">
+                <p>Bitte melde dich an, um verfügbare Events zu sehen.</p>
+              </div>
+            `;
           }
           if (bookingsContainer) {
-            bookingsContainer.innerHTML = "<p>Bitte melde dich an, um deine Tickets zu sehen.</p>";
+            bookingsContainer.innerHTML = `
+              <div class="empty-state">
+                <p>Bitte melde dich an, um deine Tickets zu sehen.</p>
+              </div>
+            `;
           }
         }
       });

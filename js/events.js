@@ -200,7 +200,12 @@ class EventsManager {
     await this.loadEvents();
 
     if (this.events.length === 0) {
-      container.innerHTML = "<p>Keine Events verfügbar.</p>";
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>Aktuell sind keine Events veröffentlicht.</p>
+          <p><small>Schau bald wieder vorbei.</small></p>
+        </div>
+      `;
       return;
     }
 
@@ -211,6 +216,10 @@ class EventsManager {
       const location = this.escapeHtml(event.location || "N/A");
       const date = this.escapeHtml(this.formatDate(event.date));
       const time = this.escapeHtml(event.time || "N/A");
+      const rawPrice = Number.parseFloat(event.price);
+      const displayPrice = Number.isFinite(rawPrice) && rawPrice >= 0
+        ? `${rawPrice.toFixed(2).replace(".", ",")} EUR`
+        : "Eintritt frei";
 
       return `
       <div class="event-card">
@@ -227,6 +236,10 @@ class EventsManager {
           <div class="event-detail-row">
             <strong>Ort:</strong>
             <span>${location}</span>
+          </div>
+          <div class="event-detail-row">
+            <strong>Preis:</strong>
+            <span>${displayPrice}</span>
           </div>
           <div class="event-detail-row">
             <strong>Kapazität:</strong>

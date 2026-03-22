@@ -413,7 +413,12 @@ class BookingManager {
     const bookings = await this.getUserBookings();
 
     if (bookings.length === 0) {
-      container.innerHTML = "<p>Du hast noch keine Tickets gebucht.</p>";
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>Du hast noch keine Tickets gebucht.</p>
+          <p><small>Buche ein Event und dein Ticket erscheint hier.</small></p>
+        </div>
+      `;
       return;
     }
 
@@ -422,10 +427,11 @@ class BookingManager {
       const event = await eventsManager.getEventById(booking.eventId);
       const eventTitle = this.escapeHtml(event ? event.title : "Gelöschtes Event");
       const ticketNumber = this.escapeHtml(booking.ticketNumber);
-      const status = this.escapeHtml(booking.status === "confirmed" ? "✓ Bestätigt" : booking.status);
+      const status = this.escapeHtml(booking.status === "confirmed" ? "Bestätigt" : booking.status);
+      const statusClass = booking.status === "confirmed" ? "available-tickets" : "available-tickets low";
 
       html += `
-        <div class="card">
+        <div class="card ticket-card">
           <h3>${eventTitle}</h3>
           <div class="event-details">
             <div class="event-detail-row">
@@ -438,7 +444,7 @@ class BookingManager {
             </div>
             <div class="event-detail-row">
               <strong>Status:</strong>
-              <span>${status}</span>
+              <span class="${statusClass}">${status}</span>
             </div>
             ${booking.checkedIn ? `<div class="event-detail-row"><strong>Eingecheckt:</strong> ✓ Ja</div>` : ""}
           </div>
@@ -488,6 +494,7 @@ class BookingManager {
       <div class="form-group">
         <label>E-Mail *</label>
         <input type="email" id="booking-email" value="${authManager.currentUser.email}" disabled />
+        <small>Die Bestätigung wird an diese Adresse gesendet.</small>
       </div>
       <div class="form-group">
         <button class="btn btn-primary btn-block" onclick="bookingManager.confirmBooking('${eventId}')">
@@ -529,7 +536,7 @@ class BookingManager {
         : "Wird in der Email bestätigt";
 
     modalContent.innerHTML = `
-      <div style="text-align: center;">
+      <div class="booking-success">
         <h2>✓ Ticket erfolgreich gebucht!</h2>
         <p>Falls EmailJS konfiguriert ist, wird eine Bestaetigungsmail versendet.</p>
         <p><strong>${this.escapeHtml(booking.eventTitle || "Event")}</strong></p>
@@ -537,9 +544,9 @@ class BookingManager {
         <div class="qr-container">
           <img src="${booking.qrCodeUrl}" alt="QR Code" />
         </div>
-        <div class="card" style="background: #f0fdf4; border-left: 4px solid #10b981;">
+        <div class="card booking-success-ticket">
           <p><strong>Ticketnummer:</strong></p>
-          <p style="font-family: monospace; font-size: 1.2rem; letter-spacing: 2px;">${this.escapeHtml(booking.ticketNumber)}</p>
+          <p class="ticket-code">${this.escapeHtml(booking.ticketNumber)}</p>
         </div>
         <p><small>Speichere diese Ticketnummer oder zeige den QR-Code am Event.</small></p>
         <button class="btn btn-primary btn-block" onclick="bookingManager.closeBookingModal()">

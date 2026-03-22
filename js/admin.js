@@ -66,7 +66,11 @@ class AdminPanel {
     const events = await eventsManager.loadEvents();
 
     if (events.length === 0) {
-      container.innerHTML = "<p>Keine Events vorhanden. Erstelle ein neues Event!</p>";
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>Keine Events vorhanden. Erstelle ein neues Event.</p>
+        </div>
+      `;
       return;
     }
 
@@ -119,7 +123,7 @@ class AdminPanel {
         <label>Beschreibung *</label>
         <textarea id="event-description" placeholder="Beschreibe dein Event..." rows="4" required></textarea>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div class="form-grid-2">
         <div class="form-group">
           <label>Datum *</label>
           <input type="date" id="event-date" required />
@@ -129,7 +133,7 @@ class AdminPanel {
           <input type="time" id="event-time" required />
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div class="form-grid-2">
         <div class="form-group">
           <label>Kapazität (Plätze) *</label>
           <input type="number" id="event-capacity" min="1" placeholder="100" required />
@@ -171,7 +175,7 @@ class AdminPanel {
         <label>Beschreibung *</label>
         <textarea id="event-description" rows="4" required>${safeDescription}</textarea>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div class="form-grid-2">
         <div class="form-group">
           <label>Datum *</label>
           <input type="date" id="event-date" value="${dateStr}" required />
@@ -181,7 +185,7 @@ class AdminPanel {
           <input type="time" id="event-time" value="${safeTime}" required />
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div class="form-grid-2">
         <div class="form-group">
           <label>Kapazität (Plätze) *</label>
           <input type="number" id="event-capacity" value="${event.capacity}" min="1" required />
@@ -248,12 +252,21 @@ class AdminPanel {
       return;
     }
 
-    container.innerHTML = '<div class="spinner"></div> Lade Buchungen...';
+    container.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Lade Buchungen...</p>
+      </div>
+    `;
 
     const bookings = await bookingManager.getAllBookings();
 
     if (bookings.length === 0) {
-      container.innerHTML = "<p>Keine Buchungen vorhanden.</p>";
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>Keine Buchungen vorhanden.</p>
+        </div>
+      `;
       return;
     }
 
@@ -271,7 +284,7 @@ class AdminPanel {
 
       html += `
         <tr>
-          <td><code style="font-size: 0.8rem;">${ticket}</code></td>
+          <td><code class="table-code">${ticket}</code></td>
           <td>${userName}</td>
           <td>${userEmail}</td>
           <td>${eventName}</td>
@@ -287,7 +300,7 @@ class AdminPanel {
 
     html += "</tbody></table></div>";
     html += `
-      <div style="margin-top: 2rem;">
+      <div class="section-actions">
         <button class="btn btn-primary" onclick="bookingManager.exportBookingsToCSV()">
           📊 Zu CSV exportieren
         </button>
@@ -332,7 +345,7 @@ class AdminPanel {
     container.innerHTML = `
       <div class="card">
         <h3>Öffentliche App-Konfiguration</h3>
-        <p style="color: #6b7280; margin-bottom: 1.5rem;">Diese Werte sind für die UI sichtbar und enthalten keine Secrets.</p>
+        <p class="helper-text">Diese Werte sind für die UI sichtbar und enthalten keine Secrets.</p>
 
         <div class="form-group">
           <label>Support-Email-Adresse *</label>
@@ -351,7 +364,7 @@ class AdminPanel {
         </div>
 
         <h3>EmailJS (Clientseitige Mail)</h3>
-        <p style="color: #6b7280; margin-bottom: 1rem;">Lege Service ID, Template ID und Public Key aus EmailJS hier ab. Das sind oeffentliche Werte und duerfen clientseitig verwendet werden.</p>
+  <p class="helper-text">Lege Service ID, Template ID und Public Key aus EmailJS hier ab. Das sind oeffentliche Werte und duerfen clientseitig verwendet werden.</p>
 
         <div class="form-group">
           <label>EmailJS Service ID *</label>
@@ -368,7 +381,7 @@ class AdminPanel {
           <input type="text" id="emailjs-public-key" value="${emailjsPublicKey}" placeholder="xxxxxxxxxxxxxxx" />
         </div>
 
-        <hr style="margin: 2rem 0; border: none; border-top: 1px solid #e5e7eb;">
+        <hr class="section-separator">
 
         <h3>Mail-System testen</h3>
         <div class="form-group">
@@ -377,8 +390,8 @@ class AdminPanel {
         </div>
         <button class="btn btn-outline" onclick="adminPanel.sendTestEmail()">Testmail senden</button>
 
-        <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-          <p style="margin: 0; color: #7f1d1d; font-size: 0.9rem;">
+        <div class="settings-warning">
+          <p>
             <strong>Hinweis:</strong> Diese Variante versendet Mails direkt aus dem Browser ueber EmailJS. Das ist einfach, aber weniger sicher als serverseitige Functions.
           </p>
         </div>
