@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f4f3ef;
   --bg-soft: #faf9f6;
   --surface: #ffffff;
@@ -27,6 +28,164 @@
   --space-6: 2rem;
   --space-7: 2.5rem;
   --space-8: 3rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0f141b;
+    --bg-soft: #121a24;
+    --surface: #18212d;
+    --surface-2: #101923;
+    --line: #2a3645;
+    --line-strong: #39495d;
+    --text: #e6edf7;
+    --text-muted: #a8b6ca;
+    --primary: #75a8d8;
+    --primary-strong: #5f95ca;
+    --primary-soft: #1a2b3f;
+    --success: #4bb88b;
+    --warning: #d29c45;
+    --danger: #d06d66;
+    --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.32);
+    --shadow-card: 0 16px 42px rgba(0, 0, 0, 0.45);
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 8% 2%, rgba(69, 114, 158, 0.2), transparent 34%),
+      radial-gradient(circle at 88% 6%, rgba(210, 156, 69, 0.12), transparent 28%),
+      linear-gradient(180deg, #0d131a 0%, #0f151e 42%, #121a25 100%);
+  }
+
+  .topbar {
+    border-bottom-color: rgba(44, 60, 79, 0.9);
+    background: rgba(14, 21, 31, 0.86);
+  }
+
+  .card,
+  .modal-content,
+  .table-responsive,
+  table,
+  .event-card,
+  .bookings-list .card,
+  .qr-container,
+  .loading-state,
+  .empty-state,
+  .tabs {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .event-card {
+    background: linear-gradient(180deg, rgba(24, 33, 45, 0.98), rgba(17, 25, 35, 0.98));
+  }
+
+  input,
+  select,
+  textarea {
+    background: #0f1823;
+    color: var(--text);
+  }
+
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    background: #172230;
+    color: #8da0ba;
+  }
+
+  .auth-tabs,
+  .tabs,
+  .close-btn,
+  .btn-ghost,
+  .btn-outline {
+    background: #132131;
+  }
+
+  .auth-tab label {
+    color: #b1c0d4;
+  }
+
+  .btn-ghost,
+  .btn-outline {
+    color: #c8def5;
+    border-color: rgba(117, 168, 216, 0.4);
+  }
+
+  .btn-ghost:hover,
+  .btn-outline:hover {
+    background: #1b3148;
+  }
+
+  .btn-danger-soft {
+    color: #ffd8d5;
+    border-color: rgba(208, 109, 102, 0.45);
+    background: rgba(124, 54, 50, 0.35);
+  }
+
+  .btn-danger-soft:hover {
+    background: rgba(145, 66, 61, 0.45);
+  }
+
+  .table-code,
+  .ticket-card code {
+    color: #d4e6fb;
+    background: #1a2d43;
+    border-color: #2c4767;
+  }
+
+  th {
+    background: #1b2f45;
+    color: #ddeafd;
+  }
+
+  th,
+  td {
+    border-bottom-color: #253548;
+  }
+
+  tbody tr:hover {
+    background: #1a2737;
+  }
+
+  .close-btn:hover {
+    background: #1b2b3d;
+    color: #dce9fa;
+  }
+
+  .modal {
+    background: rgba(6, 10, 16, 0.68);
+  }
+
+  .settings-warning {
+    background: #3a1f20;
+    color: #ffd7d4;
+    border-color: #7a3e40;
+  }
+
+  .alert-success {
+    background: #193726;
+    color: #d1f2df;
+    border-color: #2f6f4f;
+  }
+
+  .alert-error {
+    background: #3d2021;
+    color: #ffd8d5;
+    border-color: #7f4043;
+  }
+
+  .alert-warning {
+    background: #3d2f1a;
+    color: #ffe9c6;
+    border-color: #7f6337;
+  }
+
+  .alert-info {
+    background: #1a2d43;
+    color: #d4e8ff;
+    border-color: #2c4f73;
+  }
 }
 
 * {
@@ -428,7 +587,7 @@ textarea {
 }
 
 .event-detail-row strong {
-  color: #384051;
+  color: var(--text);
   font-size: 0.82rem;
   font-weight: 700;
 }
@@ -439,7 +598,7 @@ textarea {
 }
 
 .event-card p {
-  color: #4f5768;
+  color: var(--text-muted);
   font-size: 0.93rem;
 }
 
@@ -744,7 +903,7 @@ textarea {
 table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--surface);
 }
 
 th,
@@ -883,5 +1042,169 @@ hr {
     left: 0.6rem;
     right: 0.6rem;
     max-width: unset;
+  }
+}
+
+/* Keep this block at file end so dark mode reliably wins cascade. */
+@media (prefers-color-scheme: dark) {
+  body {
+    background:
+      radial-gradient(circle at 8% 2%, rgba(69, 114, 158, 0.2), transparent 34%),
+      radial-gradient(circle at 88% 6%, rgba(210, 156, 69, 0.12), transparent 28%),
+      linear-gradient(180deg, #0d131a 0%, #0f151e 42%, #121a25 100%);
+  }
+
+  .topbar {
+    border-bottom-color: rgba(44, 60, 79, 0.9);
+    background: rgba(14, 21, 31, 0.86);
+  }
+
+  .card {
+    border-color: #2a3645;
+  }
+
+  .event-card {
+    background: linear-gradient(180deg, rgba(24, 33, 45, 0.98), rgba(17, 25, 35, 0.98));
+  }
+
+  .event-card:hover {
+    border-color: #47617e;
+  }
+
+  input,
+  select,
+  textarea {
+    background: #0f1823;
+    color: var(--text);
+    border-color: #39495d;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    background: #172230;
+    color: #8da0ba;
+  }
+
+  .auth-tabs,
+  .tabs,
+  .close-btn,
+  .btn-ghost,
+  .btn-outline,
+  .loading-state,
+  .empty-state,
+  .qr-container {
+    background: #132131;
+  }
+
+  .loading-state,
+  .empty-state,
+  .table-responsive,
+  .qr-container {
+    border-color: #2f3f53;
+  }
+
+  .auth-tab label {
+    color: #c1cee1;
+  }
+
+  .btn-ghost,
+  .btn-outline {
+    color: #c8def5;
+    border-color: rgba(117, 168, 216, 0.4);
+  }
+
+  .btn-ghost:hover,
+  .btn-outline:hover {
+    background: #1b3148;
+  }
+
+  .btn-danger-soft {
+    color: #ffd8d5;
+    border-color: rgba(208, 109, 102, 0.45);
+    background: rgba(124, 54, 50, 0.35);
+  }
+
+  .btn-danger-soft:hover {
+    background: rgba(145, 66, 61, 0.45);
+  }
+
+  .available-tickets {
+    color: #d9f9ea;
+    background: #1e5944;
+  }
+
+  .available-tickets.low {
+    color: #ffe9c6;
+    background: #6e4f1f;
+  }
+
+  .available-tickets.full {
+    color: #ffd8d5;
+    background: #6d3331;
+  }
+
+  .table-code,
+  .ticket-card code {
+    color: #d4e6fb;
+    background: #1a2d43;
+    border-color: #2c4767;
+  }
+
+  .ticket-code {
+    color: #c4f0dc;
+  }
+
+  th {
+    background: #1b2f45;
+    color: #ddeafd;
+  }
+
+  th,
+  td {
+    border-bottom-color: #253548;
+  }
+
+  tbody tr:hover {
+    background: #1a2737;
+  }
+
+  .modal {
+    background: rgba(6, 10, 16, 0.68);
+  }
+
+  .close-btn:hover {
+    background: #1b2b3d;
+    color: #dce9fa;
+  }
+
+  .settings-warning {
+    background: #3a1f20;
+    color: #ffd7d4;
+    border-color: #7a3e40;
+  }
+
+  .alert-success {
+    background: #193726;
+    color: #d1f2df;
+    border-color: #2f6f4f;
+  }
+
+  .alert-error {
+    background: #3d2021;
+    color: #ffd8d5;
+    border-color: #7f4043;
+  }
+
+  .alert-warning {
+    background: #3d2f1a;
+    color: #ffe9c6;
+    border-color: #7f6337;
+  }
+
+  .alert-info {
+    background: #1a2d43;
+    color: #d4e8ff;
+    border-color: #2c4f73;
   }
 }
